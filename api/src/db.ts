@@ -1,5 +1,5 @@
 import pg from "pg";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "./logger.js";
@@ -11,8 +11,20 @@ export function createPool(databaseUrl: string): pg.Pool {
 }
 
 export async function runMigrations(pool: pg.Pool): Promise<void> {
-  const migrationPath = resolve(__dirname, "..", "..", "indexer", "migrations", "001_init.sql");
-  const sql = readFileSync(migrationPath, "utf-8");
-  await pool.query(sql);
-  logger.info("Migrations applied");
+  // Try multiple paths to handle both tsx (src/) and compiled (dist/src/) execution
+  const candidates = [
+    resolve(__dirname, "..", "..", "indexer", "migrations", "001_init.sql"),
+    resolve(__dirname, "..", "..", "..", "indexer", "migrations", "001_init.sql"),
+  ];
+
+  for (const migrationPath of candidates) {
+    if (existsSync(migrationPath)) {
+      const sql = readFileSync(migrationPath, "utf-8");
+      await pool.query(sql);
+      logger.info("Migrations applied");
+      return;
+    }
+  }
+
+  logger.warn("Migration file not found — assuming schema already exists");
 }
