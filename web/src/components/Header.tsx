@@ -6,7 +6,7 @@ import { useState } from "react";
 const NAV_LINKS = [
   { href: "/overview", label: "Overview" },
   { href: "/docs", label: "Docs" },
-  { href: "https://github.com", label: "GitHub" },
+  { href: "https://github.com/shawnwollenberg/cortex_chain", label: "GitHub" },
 ];
 
 export default function Header() {
