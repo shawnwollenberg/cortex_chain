@@ -60,9 +60,18 @@ make demo      # run end-to-end demo
 make down      # stop everything
 ```
 
-## Testnet Deployment
+## Testnet Deployment (Base Sepolia)
 
-Deploy to Base Sepolia (or OP Sepolia) with:
+Live on Base Sepolia (chain ID 84532):
+
+| Contract | Address |
+|----------|---------|
+| AgentRegistry | [`0x3Aa04083aDA29a77b97e52646C6f0b2B7D24F46d`](https://sepolia.basescan.org/address/0x3Aa04083aDA29a77b97e52646C6f0b2B7D24F46d) |
+| IntentBook | [`0xD1B7Bd65F2aB60ff84CdDF48f306a599b01d293A`](https://sepolia.basescan.org/address/0xD1B7Bd65F2aB60ff84CdDF48f306a599b01d293A) |
+| PolicyModule | [`0xCE621A324A8cb40FD424EB0D41286A97f6a6c91C`](https://sepolia.basescan.org/address/0xCE621A324A8cb40FD424EB0D41286A97f6a6c91C) |
+| AttestationRegistry | [`0x05E1701516B086CEf743cb5BC2c2A821aE848FdC`](https://sepolia.basescan.org/address/0x05E1701516B086CEf743cb5BC2c2A821aE848FdC) |
+
+Deploy your own with:
 
 ```bash
 export DEPLOYER_KEY=0x<your-key>
