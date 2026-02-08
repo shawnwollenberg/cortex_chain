@@ -48,8 +48,8 @@ export default function HowItWorks() {
 
                 {/* Content */}
                 <div
-                  className={`flex-1 md:w-[calc(50%-2.5rem)] ${
-                    i % 2 === 0 ? "md:mr-auto md:pr-12 md:text-right" : "md:ml-auto md:pl-12"
+                  className={`flex-1 md:w-[calc(50%-2rem)] ${
+                    i % 2 === 0 ? "md:mr-auto md:pr-16 md:text-right" : "md:ml-auto md:pl-16"
                   }`}
                 >
                   <h3 className="font-semibold mb-1">{s.title}</h3>
