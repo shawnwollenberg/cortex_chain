@@ -7,6 +7,7 @@ export interface IndexerConfig {
   agentRegistryAddress: Address;
   intentBookAddress: Address;
   policyModuleAddress: Address;
+  attestationRegistryAddress: Address | null;
   pollIntervalMs: number;
   startBlock: bigint;
   logLevel: "debug" | "info" | "warn" | "error";
@@ -44,6 +45,15 @@ export function loadConfig(): IndexerConfig {
     throw new Error("POLICY_MODULE_ADDRESS is not a valid address");
   }
 
+  let attestationRegistryAddress: Address | null = null;
+  const attestationRegistryEnv = process.env.ATTESTATION_REGISTRY_ADDRESS;
+  if (attestationRegistryEnv) {
+    if (!isAddress(attestationRegistryEnv)) {
+      throw new Error("ATTESTATION_REGISTRY_ADDRESS is not a valid address");
+    }
+    attestationRegistryAddress = attestationRegistryEnv as Address;
+  }
+
   const pollIntervalMs = parseInt(process.env.POLL_INTERVAL_MS ?? "2000", 10);
   if (isNaN(pollIntervalMs) || pollIntervalMs < 100) {
     throw new Error("POLL_INTERVAL_MS must be a number >= 100");
@@ -62,6 +72,7 @@ export function loadConfig(): IndexerConfig {
     agentRegistryAddress: agentRegistryAddress as Address,
     intentBookAddress: intentBookAddress as Address,
     policyModuleAddress: policyModuleAddress as Address,
+    attestationRegistryAddress,
     pollIntervalMs,
     startBlock,
     logLevel,

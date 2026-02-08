@@ -4,6 +4,7 @@ import type pg from "pg";
 import { AgentRegistryABI } from "./abi/AgentRegistry.js";
 import { IntentBookABI } from "./abi/IntentBook.js";
 import { PolicyModuleABI } from "./abi/PolicyModule.js";
+import { AttestationRegistryABI } from "./abi/AttestationRegistry.js";
 import {
   handleAgentRegistered,
   handleAgentUpdated,
@@ -20,6 +21,10 @@ import {
   handleFunctionAllowlistUpdated,
   handleSpendRecorded,
 } from "./handlers/policies.js";
+import {
+  handleAttestationSubmitted,
+  handleAttestationRevoked,
+} from "./handlers/attestations.js";
 import { setLastProcessedBlock } from "./db.js";
 import { logger } from "./logger.js";
 
@@ -32,6 +37,7 @@ interface ContractConfig {
 export class EventPoller {
   private lastProcessedBlock: bigint;
   private contracts: ContractConfig[];
+  private attestationRegistryAddress: Address | null;
 
   constructor(
     private client: PublicClient,
@@ -40,13 +46,22 @@ export class EventPoller {
     private intentBookAddress: Address,
     private policyModuleAddress: Address,
     startBlock: bigint,
+    attestationRegistryAddress: Address | null = null,
   ) {
     this.lastProcessedBlock = startBlock > 0n ? startBlock - 1n : 0n;
+    this.attestationRegistryAddress = attestationRegistryAddress;
     this.contracts = [
       { address: agentRegistryAddress, abi: AgentRegistryABI as unknown as readonly unknown[], name: "AgentRegistry" },
       { address: intentBookAddress, abi: IntentBookABI as unknown as readonly unknown[], name: "IntentBook" },
       { address: policyModuleAddress, abi: PolicyModuleABI as unknown as readonly unknown[], name: "PolicyModule" },
     ];
+    if (attestationRegistryAddress) {
+      this.contracts.push({
+        address: attestationRegistryAddress,
+        abi: AttestationRegistryABI as unknown as readonly unknown[],
+        name: "AttestationRegistry",
+      });
+    }
   }
 
   async poll(): Promise<number> {
@@ -104,6 +119,8 @@ export class EventPoller {
       await this.routeIntentBookLog(log);
     } else if (address === this.policyModuleAddress.toLowerCase()) {
       await this.routePolicyModuleLog(log);
+    } else if (this.attestationRegistryAddress && address === this.attestationRegistryAddress.toLowerCase()) {
+      await this.routeAttestationRegistryLog(log);
     }
   }
 
@@ -182,6 +199,27 @@ export class EventPoller {
     }
   }
 
+  private async routeAttestationRegistryLog(log: Log): Promise<void> {
+    try {
+      const decoded = decodeEventLog({
+        abi: AttestationRegistryABI,
+        data: log.data,
+        topics: log.topics,
+      });
+
+      switch (decoded.eventName) {
+        case "AttestationSubmitted":
+          await handleAttestationSubmitted(this.pool, log);
+          break;
+        case "AttestationRevoked":
+          await handleAttestationRevoked(this.pool, log);
+          break;
+      }
+    } catch (err) {
+      logger.warn(`Failed to decode AttestationRegistry log: ${err}`);
+    }
+  }
+
   private async recordTxReceipt(log: Log): Promise<void> {
     if (!log.transactionHash) return;
 
@@ -222,6 +260,8 @@ export class EventPoller {
         return decodeEventLog({ abi: IntentBookABI, data: log.data, topics: log.topics });
       } else if (address === this.policyModuleAddress.toLowerCase()) {
         return decodeEventLog({ abi: PolicyModuleABI, data: log.data, topics: log.topics });
+      } else if (this.attestationRegistryAddress && address === this.attestationRegistryAddress.toLowerCase()) {
+        return decodeEventLog({ abi: AttestationRegistryABI, data: log.data, topics: log.topics });
       }
     } catch {
       // Failed to decode, return null

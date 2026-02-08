@@ -5,6 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {IntentBook} from "../src/IntentBook.sol";
 import {PolicyModule} from "../src/PolicyModule.sol";
+import {AttestationRegistry} from "../src/AttestationRegistry.sol";
 
 contract Deploy is Script {
     function run() external {
@@ -18,6 +19,9 @@ contract Deploy is Script {
 
         PolicyModule policyModule = new PolicyModule();
         console.log("PolicyModule deployed at:", address(policyModule));
+
+        AttestationRegistry attestationRegistry = new AttestationRegistry();
+        console.log("AttestationRegistry deployed at:", address(attestationRegistry));
 
         vm.stopBroadcast();
     }

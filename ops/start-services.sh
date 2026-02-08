@@ -43,6 +43,7 @@ echo "    Postgres ready"
 # Run schema migrations (idempotent — uses IF NOT EXISTS)
 echo "==> Running migrations..."
 psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/001_init.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/002_attestations.sql" -q 2>/dev/null || true
 echo "    Migrations applied"
 
 # --- Indexer ---
@@ -53,6 +54,7 @@ DATABASE_URL="$DATABASE_URL" \
 AGENT_REGISTRY_ADDRESS="$AGENT_REGISTRY_ADDRESS" \
 INTENT_BOOK_ADDRESS="$INTENT_BOOK_ADDRESS" \
 POLICY_MODULE_ADDRESS="$POLICY_MODULE_ADDRESS" \
+ATTESTATION_REGISTRY_ADDRESS="${ATTESTATION_REGISTRY_ADDRESS:-}" \
 POLL_INTERVAL_MS=500 \
 START_BLOCK=0 \
 LOG_LEVEL=info \

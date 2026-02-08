@@ -11,9 +11,11 @@ export function createPool(databaseUrl: string): pg.Pool {
 }
 
 export async function runMigrations(pool: pg.Pool): Promise<void> {
-  const migrationPath = resolve(__dirname, "..", "..", "migrations", "001_init.sql");
-  const sql = readFileSync(migrationPath, "utf-8");
-  await pool.query(sql);
+  const migrationsDir = resolve(__dirname, "..", "..", "migrations");
+  const migration001 = readFileSync(resolve(migrationsDir, "001_init.sql"), "utf-8");
+  await pool.query(migration001);
+  const migration002 = readFileSync(resolve(migrationsDir, "002_attestations.sql"), "utf-8");
+  await pool.query(migration002);
   logger.info("Migrations applied");
 }
 

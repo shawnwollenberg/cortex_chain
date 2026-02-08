@@ -5,6 +5,7 @@ import { createAgentsRouter } from "./routes/agents.js";
 import { createIntentsRouter } from "./routes/intents.js";
 import { createPoliciesRouter } from "./routes/policies.js";
 import { createTxRouter } from "./routes/tx.js";
+import { createAttestationsRouter } from "./routes/attestations.js";
 
 export function createApp(pool: pg.Pool): express.Express {
   const app = express();
@@ -20,6 +21,7 @@ export function createApp(pool: pg.Pool): express.Express {
   app.use("/intents", createIntentsRouter(pool));
   app.use("/accounts", createPoliciesRouter(pool));
   app.use("/tx", createTxRouter(pool));
+  app.use("/attestations", createAttestationsRouter(pool));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

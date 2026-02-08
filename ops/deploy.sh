@@ -48,14 +48,16 @@ if [ ! -f "$BROADCAST_FILE" ]; then
 fi
 
 # Extract contract addresses in deployment order
-# Deploy.s.sol creates: AgentRegistry, IntentBook, PolicyModule
+# Deploy.s.sol creates: AgentRegistry, IntentBook, PolicyModule, AttestationRegistry
 AGENT_REGISTRY=$(jq -r '.transactions[0].contractAddress' "$BROADCAST_FILE")
 INTENT_BOOK=$(jq -r '.transactions[1].contractAddress' "$BROADCAST_FILE")
 POLICY_MODULE=$(jq -r '.transactions[2].contractAddress' "$BROADCAST_FILE")
+ATTESTATION_REGISTRY=$(jq -r '.transactions[3].contractAddress' "$BROADCAST_FILE")
 
-echo "    AgentRegistry: $AGENT_REGISTRY"
-echo "    IntentBook:    $INTENT_BOOK"
-echo "    PolicyModule:  $POLICY_MODULE"
+echo "    AgentRegistry:        $AGENT_REGISTRY"
+echo "    IntentBook:           $INTENT_BOOK"
+echo "    PolicyModule:         $POLICY_MODULE"
+echo "    AttestationRegistry:  $ATTESTATION_REGISTRY"
 
 # Write .env.deployed for services and demo
 cat > "$ENV_FILE" <<EOF
@@ -65,6 +67,7 @@ DATABASE_URL=$DATABASE_URL
 AGENT_REGISTRY_ADDRESS=$AGENT_REGISTRY
 INTENT_BOOK_ADDRESS=$INTENT_BOOK
 POLICY_MODULE_ADDRESS=$POLICY_MODULE
+ATTESTATION_REGISTRY_ADDRESS=$ATTESTATION_REGISTRY
 
 # Anvil account 0 — deployer
 DEPLOYER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80

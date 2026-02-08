@@ -33,6 +33,10 @@ function describeEvent(event: EventSummary): string {
       return `Function ${args.selector} on ${args.target} ${args.allowed === "true" ? "allowed" : "disallowed"}`;
     case "SpendRecorded":
       return `Spent ${args.amount} of token ${args.token} (daily total: ${args.dailyTotal})`;
+    case "AttestationSubmitted":
+      return `Attestation #${args.id} submitted by ${args.attester} (schema: ${args.schema})`;
+    case "AttestationRevoked":
+      return `Attestation #${args.id} revoked`;
     default:
       return `${eventName} event`;
   }

@@ -8,6 +8,7 @@ install:
 	cd solver && npm install
 	cd indexer && npm install
 	cd api && npm install
+	cd mcp && npm install
 	cd ops/demo && npm install
 
 # Start infrastructure via Docker Compose (Anvil + Postgres)

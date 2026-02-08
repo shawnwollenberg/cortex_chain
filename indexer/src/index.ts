@@ -29,9 +29,12 @@ async function main(): Promise<void> {
   const startBlock = lastBlock !== null ? lastBlock + 1n : config.startBlock;
 
   const currentBlock = await publicClient.getBlockNumber();
-  logger.info(`AgentRegistry: ${config.agentRegistryAddress}`);
-  logger.info(`IntentBook:    ${config.intentBookAddress}`);
-  logger.info(`PolicyModule:  ${config.policyModuleAddress}`);
+  logger.info(`AgentRegistry:        ${config.agentRegistryAddress}`);
+  logger.info(`IntentBook:           ${config.intentBookAddress}`);
+  logger.info(`PolicyModule:         ${config.policyModuleAddress}`);
+  if (config.attestationRegistryAddress) {
+    logger.info(`AttestationRegistry:  ${config.attestationRegistryAddress}`);
+  }
   logger.info(`Current block: ${currentBlock}`);
   logger.info(`Start block:   ${startBlock}${lastBlock !== null ? " (resumed)" : ""}`);
 
@@ -42,6 +45,7 @@ async function main(): Promise<void> {
     config.intentBookAddress,
     config.policyModuleAddress,
     startBlock,
+    config.attestationRegistryAddress,
   );
 
   logger.info(`Starting polling loop (interval=${config.pollIntervalMs}ms)`);
