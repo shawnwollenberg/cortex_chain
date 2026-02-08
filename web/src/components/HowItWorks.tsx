@@ -26,6 +26,15 @@ const STEPS = [
   },
 ];
 
+function StepContent({ title, description }: { title: string; description: string }) {
+  return (
+    <>
+      <h3 className="font-semibold mb-1">{title}</h3>
+      <p className="text-sm text-muted leading-relaxed">{description}</p>
+    </>
+  );
+}
+
 export default function HowItWorks() {
   return (
     <section className="py-20">
@@ -35,38 +44,28 @@ export default function HowItWorks() {
         </h2>
 
         <div className="space-y-10">
-          {STEPS.map((s, i) => (
-            <div key={s.step} className="flex items-start gap-4 md:grid md:grid-cols-[1fr_2.5rem_1fr] md:gap-6 md:items-start">
-              {/* Left content (even steps) */}
-              <div className={`hidden md:block ${i % 2 === 0 ? "text-right" : ""}`}>
-                {i % 2 === 0 && (
-                  <>
-                    <h3 className="font-semibold mb-1">{s.title}</h3>
-                    <p className="text-sm text-muted leading-relaxed">{s.description}</p>
-                  </>
-                )}
-              </div>
+          {STEPS.map((s, i) => {
+            const isLeft = i % 2 === 0;
 
-              {/* Step number (center column) */}
-              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent-purple to-accent-blue text-sm font-bold text-white">
-                {s.step}
-              </div>
-
-              {/* Right content (odd steps) / mobile content */}
-              <div className={`flex-1 md:flex-none ${i % 2 !== 0 ? "" : "md:hidden"}`}>
-                <h3 className="font-semibold mb-1">{s.title}</h3>
-                <p className="text-sm text-muted leading-relaxed">{s.description}</p>
-              </div>
-
-              {/* Right content (odd steps, desktop only) */}
-              {i % 2 !== 0 && (
-                <div className="hidden md:block">
-                  <h3 className="font-semibold mb-1">{s.title}</h3>
-                  <p className="text-sm text-muted leading-relaxed">{s.description}</p>
+            return (
+              <div key={s.step} className="flex items-start gap-4 md:grid md:grid-cols-[1fr_2.5rem_1fr] md:gap-6 md:items-start">
+                {/* Left column (desktop only) */}
+                <div className={`hidden md:block ${isLeft ? "text-right" : ""}`}>
+                  {isLeft && <StepContent title={s.title} description={s.description} />}
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* Center: step number */}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent-purple to-accent-blue text-sm font-bold text-white">
+                  {s.step}
+                </div>
+
+                {/* Right column: always visible on mobile, only odd steps on desktop */}
+                <div className={`flex-1 md:flex-none ${isLeft ? "md:hidden" : ""}`}>
+                  <StepContent title={s.title} description={s.description} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>
