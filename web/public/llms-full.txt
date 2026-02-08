@@ -942,3 +942,95 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 - **Forge fmt** ensures consistent formatting.
 - Fuzz tests run 1,000 iterations per property.
 - Invariant tests run 256 sequences of 64 calls each.
+
+
+---
+
+# Testnet Deployment Guide
+
+Deploy the full Cortex stack (contracts + offchain services) to a public testnet.
+
+**Recommended testnet:** Base Sepolia — an OP Stack L2 with fast blocks (~2s), free faucets, and a good block explorer.
+
+| | Base Sepolia | OP Sepolia (alternative) |
+|--|--|--|
+| Chain ID | 84532 | 11155420 |
+| RPC | `https://sepolia.base.org` | `https://sepolia.optimism.io` |
+| Explorer | sepolia.basescan.org | sepolia-optimistic.etherscan.io |
+
+## Prerequisites
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`)
+- [Node.js](https://nodejs.org/) >= 18
+- PostgreSQL client tools (`psql`)
+- Three wallets (deployer, solver, agent) — each needs testnet ETH
+
+## 1. Get Testnet ETH
+
+Fund your deployer wallet with Base Sepolia ETH from any of these faucets:
+
+- [Alchemy Faucet](https://www.alchemy.com/faucets/base-sepolia) — requires free Alchemy account
+- [Coinbase Developer Platform](https://portal.cdp.coinbase.com/products/faucet) — requires Coinbase account
+- [thirdweb Faucet](https://thirdweb.com/base-sepolia-testnet) — no account required
+
+## 2. Configure Environment
+
+```bash
+cp ops/.env.testnet.example ops/.env.testnet
+```
+
+Edit `ops/.env.testnet`:
+
+```bash
+RPC_URL=https://sepolia.base.org
+DATABASE_URL=postgres://user:pass@host:5432/cortex
+DEPLOYER_KEY=0x<your-deployer-private-key>
+SOLVER_PRIVATE_KEY=0x<your-solver-private-key>
+AGENT_PRIVATE_KEY=0x<your-agent-private-key>
+```
+
+## 3. Deploy Contracts
+
+```bash
+source ops/.env.testnet
+./ops/deploy-testnet.sh
+```
+
+Deploys AgentRegistry, IntentBook, PolicyModule, and AttestationRegistry. Contract addresses are written to `ops/.env.testnet`.
+
+## 4. Set Up Postgres
+
+Options: [Railway](https://railway.app/), [Neon](https://neon.tech/), [Supabase](https://supabase.com/). Copy the connection string and update `DATABASE_URL`.
+
+## 5. Run Migrations
+
+```bash
+source ops/.env.testnet
+psql "$DATABASE_URL" -f indexer/migrations/001_init.sql
+```
+
+## 6. Start Services
+
+```bash
+source ops/.env.testnet
+
+# Indexer
+cd indexer && npm run build && node dist/index.js
+
+# Solver
+cd solver && npm run build && node dist/index.js
+
+# API
+cd api && npm run build && node dist/index.js
+```
+
+## 7. Verify
+
+```bash
+curl http://localhost:3001/health
+curl http://localhost:3001/agents?owner=0x0000000000000000000000000000000000000000
+```
+
+## Alternative: OP Sepolia
+
+Same steps. Set `RPC_URL=https://sepolia.optimism.io`. The deploy script auto-detects chain ID.

@@ -9,6 +9,7 @@
 - [Contracts](/docs/contracts.md): Smart contract reference for AgentRegistry, IntentBook, PolicyModule, and PolicyAccount (ERC-4337)
 - [REST API](/docs/api.md): Endpoint reference for agents, intents, policies, and transaction explanations
 - [Local Development](/docs/local-dev.md): Step-by-step guide to running the full stack locally
+- [Testnet Deployment](/docs/testnet-deploy.md): Deploy the full stack to Base Sepolia or OP Sepolia
 - [MCP Server](/docs/mcp.md): Model Context Protocol tools for AI agent integration (lookup_agent, list_open_intents, get_policy, explain_tx, lookup_attestation)
 - [Design Decisions](/docs/decisions.md): 12 key architectural choices with rationale and tradeoffs
 - [Security](/docs/security.md): Threat model covering bridge risks, intent manipulation, solver abuse, policy bypass, key management, and smart contract risks
