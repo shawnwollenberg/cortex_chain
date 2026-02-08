@@ -1,4 +1,4 @@
-.PHONY: install up up-native deploy services demo down down-native clean logs e2e e2e-native
+.PHONY: install up up-native deploy services demo down down-native clean logs e2e e2e-native web-dev web-build
 
 API_PORT ?= 3001
 
@@ -10,6 +10,7 @@ install:
 	cd api && npm install
 	cd mcp && npm install
 	cd ops/demo && npm install
+	cd web && npm install
 
 # Start infrastructure via Docker Compose (Anvil + Postgres)
 up:
@@ -59,3 +60,11 @@ e2e: up deploy services demo
 
 # Full end-to-end (native): anvil → deploy → services → demo
 e2e-native: up-native deploy services demo
+
+# Web: start dev server
+web-dev:
+	cd web && npm run dev
+
+# Web: production build
+web-build:
+	cd web && npm run build

@@ -1,0 +1,944 @@
+# Getting Started with Cortex
+
+Cortex is an EVM-compatible Layer 2 designed for AI agents. These docs cover the full stack: smart contracts, offchain services, APIs, and local development.
+
+## What is Cortex?
+
+Cortex is an agent-native Ethereum L2 where AI agents have:
+
+- **Onchain identity** — Agents register with metadata, pubkeys, and capability hashes via `AgentRegistry`
+- **Policy-aware smart accounts** — ERC-4337 accounts enforcing spend limits, target allowlists, and function-level permissions via `PolicyModule`
+- **Intent-based execution** — Agents sign EIP-712 intents with constraints; solvers fill them via `IntentBook`
+- **Machine-readable state** — All events indexed into Postgres, served via REST API and MCP server
+- **Verifiable inputs** — Optional attestation registry for signed provenance of offchain data
+
+## Quick Start
+
+```bash
+# Install all dependencies
+make install
+
+# Run the full stack end-to-end
+make e2e
+```
+
+This starts Anvil (local EVM), deploys contracts, launches the indexer/solver/API, and runs a demo scenario.
+
+## Documentation
+
+- [Architecture](/docs/architecture.md) — System diagram, data flow, database schema
+- [Contracts](/docs/contracts.md) — AgentRegistry, IntentBook, PolicyModule, PolicyAccount reference
+- [REST API](/docs/api.md) — Endpoint reference with example responses
+- [Local Development](/docs/local-dev.md) — Step-by-step local dev guide
+- [MCP Server](/docs/mcp.md) — Model Context Protocol tools for AI agents
+- [Design Decisions](/docs/decisions.md) — Key architectural choices and tradeoffs
+- [Security](/docs/security.md) — Threat model, mitigations, and invariants
+
+## Technology Stack
+
+| Layer | Stack |
+|-------|-------|
+| Contracts | Solidity 0.8.24, Foundry, OpenZeppelin |
+| Solver | TypeScript, viem, node-postgres |
+| Indexer | TypeScript, viem, node-postgres |
+| API | TypeScript, Express 4, node-postgres |
+| Database | PostgreSQL 16 |
+| Local dev | Anvil (Foundry), Docker Compose |
+
+
+---
+
+# Architecture
+
+Cortex is a vertically integrated stack of onchain contracts and offchain services.
+
+## System Diagram
+
+```
+Agent Runtime (signs EIP-712 intents, holds private key)
+    │                              │
+    │ submitIntent()               │ registerAgent()
+    ▼                              ▼
+IntentBook                    AgentRegistry
+(EIP-712 + constraints)       (identity + metadata)
+    │                              │
+    │ IntentSubmitted event        │
+    ▼                              │
+Solver                             │
+(watches events, simulates)        │
+    │                              │
+    │ fillIntent()                 │
+    ▼                              ▼
+PolicyModule (spend limits, target allowlists, function allowlists)
+    │
+    ▼
+Indexer (polls chain, ingests events → Postgres)
+    │
+    ▼
+Postgres (agents, intents, fills, policies, tx_receipts)
+    │
+    ▼
+REST API (/agents, /intents, /accounts, /tx/:hash)
+```
+
+## Data Flow
+
+1. **Agent registers** → calls `AgentRegistry.registerAgent()` → emits `AgentRegistered`
+2. **Agent configures policies** → calls `PolicyModule.setSpendLimit()`, `setTargetAllowed()` → emits policy events
+3. **Agent signs intent** → EIP-712 typed data (domain: "AgentIntentBook", version "1", chainId, verifyingContract)
+4. **Agent submits intent** → calls `IntentBook.submitIntent(intent, v, r, s)` → validates signature + constraints → emits `IntentSubmitted`
+5. **Solver watches** → polls for `IntentSubmitted` events → validates constraints → simulates via `eth_call` → calls `IntentBook.fillIntent()` → emits `IntentFilled`
+6. **Indexer ingests** → polls all contract events → writes to Postgres tables (agents, intents, fills, policies, tx_receipts)
+7. **API serves** → queries Postgres → returns JSON to agents or frontends
+
+## Contract Architecture
+
+| Contract | Purpose | Key Feature |
+|----------|---------|-------------|
+| `AgentRegistry` | Agent identity | Stores owner, metadataURI, pubkey, capabilitiesHash |
+| `IntentBook` | Intent lifecycle | EIP-712 signing, nonce replay protection, constraint enforcement |
+| `PolicyModule` | Policy enforcement | Daily spend limits, target allowlist, function selector allowlist |
+| `PolicyAccount` | ERC-4337 account | Delegates validation to PolicyModule, signature verification |
+
+## Database Schema
+
+| Table | Indexed From | Key Columns |
+|-------|-------------|-------------|
+| `agents` | `AgentRegistered`, `AgentUpdated`, `AgentRevoked` | agent_id, owner, metadata_uri, revoked |
+| `intents` | `IntentSubmitted`, `IntentCancelled` | intent_id, owner, status, input_token, output_token |
+| `fills` | `IntentFilled` | intent_id, solver, amount_in, amount_out |
+| `policies` | `SpendLimitSet`, `TargetAllowlistUpdated`, `FunctionAllowlistUpdated` | account, policy_type, token/target |
+| `tx_receipts` | All transactions | tx_hash, block_number, events (JSONB) |
+
+## Technology Stack
+
+- **Contracts:** Solidity 0.8.24, Foundry, OpenZeppelin
+- **Solver:** TypeScript, viem, node-postgres
+- **Indexer:** TypeScript, viem, node-postgres
+- **API:** TypeScript, Express 4, node-postgres
+- **Database:** PostgreSQL 16
+- **Local dev:** Anvil (Foundry), Docker Compose
+
+
+---
+
+# Contracts Reference
+
+Four core contracts make up the onchain layer: AgentRegistry, IntentBook, PolicyModule, and PolicyAccount.
+
+---
+
+## AgentRegistry
+
+Stores agent identity records. Agents are registered by their owner address.
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `registerAgent(metadataURI, pubkey, capabilitiesHash)` | Anyone | Register a new agent. Returns `agentId`. |
+| `updateAgent(agentId, metadataURI, capabilitiesHash)` | Owner only | Update agent metadata. Reverts if revoked. |
+| `revokeAgent(agentId)` | Owner only | Permanently revoke an agent. |
+| `getAgent(agentId)` | View | Get agent record. Reverts if not found. |
+| `getAgentsByOwner(owner)` | View | Get all agent IDs for an owner. |
+
+### Events
+
+```solidity
+event AgentRegistered(uint256 indexed agentId, address indexed owner, string metadataURI);
+event AgentUpdated(uint256 indexed agentId, string metadataURI, bytes32 capabilitiesHash);
+event AgentRevoked(uint256 indexed agentId);
+```
+
+### Errors
+
+```solidity
+error Unauthorized();
+error AgentNotFound();
+error AgentAlreadyRevoked();
+```
+
+---
+
+## IntentBook
+
+Manages the intent lifecycle: submit, fill, cancel. Uses EIP-712 signed typed data.
+
+### EIP-712 Domain
+
+```
+name: "AgentIntentBook"
+version: "1"
+chainId: <chain ID>
+verifyingContract: <IntentBook address>
+```
+
+### Intent Struct
+
+```solidity
+struct Intent {
+    address owner;
+    IntentType intentType;
+    Constraints constraints;
+    address inputToken;
+    address outputToken;
+    uint256 nonce;
+}
+
+struct Constraints {
+    uint256 amountInMax;
+    uint256 amountOutMin;
+    uint256 deadline;
+    uint16 slippageBps;
+}
+```
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `submitIntent(intent, v, r, s)` | Anyone | Submit a signed intent. Validates signature, nonce, deadline, slippage. |
+| `cancelIntent(intentId)` | Owner only | Cancel an open intent. |
+| `fillIntent(intentId, fill)` | Anyone (solver) | Fill an open intent. Validates constraints and expiry. |
+| `getIntent(intentId)` | View | Get intent data. |
+| `getIntentStatus(intentId)` | View | Get intent status (OPEN, FILLED, CANCELLED, EXPIRED). |
+
+### Events
+
+```solidity
+event IntentSubmitted(uint256 indexed intentId, address indexed owner, uint256 nonce);
+event IntentCancelled(uint256 indexed intentId);
+event IntentFilled(uint256 indexed intentId, address indexed solver, uint256 amountIn, uint256 amountOut);
+```
+
+### Errors
+
+```solidity
+error Unauthorized();
+error InvalidNonce();
+error IntentExpired();
+error IntentNotOpen();
+error ConstraintViolation();
+error InvalidSlippage();     // slippageBps > 10,000
+error InvalidDeadline();     // deadline <= block.timestamp
+error InvalidSignature();    // recovered signer != intent.owner
+```
+
+---
+
+## PolicyModule
+
+Enforces per-account policies: spend limits, target allowlists, function selector allowlists.
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `setSpendLimit(token, maxPerDay)` | Account (msg.sender) | Set daily spend limit for a token. 0 removes the limit. |
+| `setTargetAllowed(target, allowed)` | Account | Add/remove target from allowlist. |
+| `setFunctionAllowed(target, selector, allowed)` | Account | Allow/disallow a function selector on a target. |
+| `setUseFunctionAllowlist(enabled)` | Account | Enable/disable function-level checks. |
+| `checkTransaction(target, value, data)` | View | Validate a transaction against all policies. |
+| `recordSpend(token, amount)` | Account | Record spending against daily limit. |
+| `getSpendLimit(account, token)` | View | Get spend limit config. |
+| `getSpentToday(account, token)` | View | Get amount spent in current 24h window. |
+| `isTargetAllowed(account, target)` | View | Check if target is on allowlist. |
+| `isFunctionAllowed(account, target, selector)` | View | Check if function is allowed on target. |
+
+### Events
+
+```solidity
+event SpendLimitSet(address indexed account, address indexed token, uint256 maxPerDay);
+event TargetAllowlistUpdated(address indexed account, address indexed target, bool allowed);
+event FunctionAllowlistUpdated(address indexed account, address indexed target, bytes4 selector, bool allowed);
+event SpendRecorded(address indexed account, address indexed token, uint256 amount, uint256 dailyTotal);
+```
+
+### Errors
+
+```solidity
+error Unauthorized();
+error TargetNotAllowed(address target);
+error FunctionNotAllowed(address target, bytes4 selector);
+error DailySpendLimitExceeded(address token, uint256 attempted, uint256 remaining);
+error DelegateCallNotAllowed();
+```
+
+### Spend Limit Mechanics
+
+- 24-hour rolling window based on `lastResetTimestamp`
+- Window resets when `block.timestamp >= lastResetTimestamp + 1 day`
+- `maxPerDay = 0` means no limit configured (allows freely)
+- Limits are per-account, per-token
+- `address(0)` represents native ETH
+
+---
+
+## PolicyAccount (ERC-4337)
+
+Smart account that delegates policy validation to PolicyModule.
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `execute(target, value, data)` | EntryPoint or self | Execute a call after policy check. |
+| `validateUserOp(userOp, userOpHash, missingAccountFunds)` | EntryPoint only | Validate ERC-4337 UserOp signature. |
+
+The account checks `PolicyModule.checkTransaction()` before executing any call and records ETH spend via `PolicyModule.recordSpend()`.
+
+
+---
+
+# REST API Reference
+
+Base URL: `http://localhost:3001` (configurable via `API_PORT`)
+
+## Endpoints
+
+### Health Check
+
+```
+GET /health
+```
+
+Response:
+```json
+{ "status": "ok" }
+```
+
+---
+
+### Agents
+
+#### Get Agent by ID
+
+```
+GET /agents/:agentId
+```
+
+Response `200`:
+```json
+{
+  "agent_id": "1",
+  "owner": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+  "metadata_uri": "ipfs://agent-meta",
+  "pubkey": "0xaabb",
+  "capabilities_hash": "0x...",
+  "revoked": false,
+  "block_number": "10"
+}
+```
+
+Errors: `400` (invalid ID), `404` (not found)
+
+#### List Agents by Owner
+
+```
+GET /agents?owner=0x...&limit=50&offset=0
+```
+
+The `owner` parameter is required.
+
+Response `200`:
+```json
+{
+  "agents": [...],
+  "pagination": { "limit": 50, "offset": 0, "count": 1 }
+}
+```
+
+Errors: `400` (missing or invalid owner)
+
+---
+
+### Intents
+
+#### Get Intent by ID
+
+```
+GET /intents/:id
+```
+
+Response `200`:
+```json
+{
+  "intent_id": "1",
+  "owner": "0x...",
+  "intent_type": "SWAP_EXACT_IN_MAX_SLIPPAGE",
+  "input_token": "0x...",
+  "output_token": "0x...",
+  "amount_in_max": "1000000000000000000000",
+  "amount_out_min": "900000000000000000000",
+  "deadline": "1738965600",
+  "slippage_bps": "100",
+  "nonce": "42",
+  "status": "FILLED",
+  "block_number": "15",
+  "fill": {
+    "solver": "0x...",
+    "amount_in": "950000000000000000000",
+    "amount_out": "900000000000000000000",
+    "tx_hash": "0x...",
+    "block_number": "18"
+  }
+}
+```
+
+If the intent is not filled, `fill` is `null`.
+
+Errors: `400` (invalid ID), `404` (not found)
+
+#### List Intents
+
+```
+GET /intents?status=open&limit=50&offset=0
+```
+
+The `status` filter is optional. Valid values: `open`, `filled`, `cancelled`.
+
+Response `200`:
+```json
+{
+  "intents": [...],
+  "pagination": { "limit": 50, "offset": 0, "count": 5 }
+}
+```
+
+Errors: `400` (invalid status)
+
+---
+
+### Policies
+
+#### Get Account Policies
+
+```
+GET /accounts/:address/policies?limit=50&offset=0
+```
+
+Response `200`:
+```json
+{
+  "account": "0x...",
+  "policies": [
+    {
+      "policy_type": "SPEND_LIMIT",
+      "token": "0x1111111111111111111111111111111111111111",
+      "max_per_day": "10000000000000000000000",
+      "block_number": "12"
+    },
+    {
+      "policy_type": "TARGET_ALLOWLIST",
+      "target": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "allowed": true,
+      "block_number": "13"
+    }
+  ],
+  "pagination": { "limit": 50, "offset": 0, "count": 2 }
+}
+```
+
+Errors: `400` (invalid address)
+
+---
+
+### Transaction Explain
+
+#### Explain Transaction
+
+```
+GET /tx/:hash/explain
+```
+
+Returns a human-readable and machine-readable summary of a transaction's events.
+
+Response `200`:
+```json
+{
+  "tx_hash": "0x...",
+  "block_number": "15",
+  "summary": "Transaction contained 1 event(s)",
+  "events": [
+    {
+      "eventName": "IntentSubmitted",
+      "args": { "intentId": "1", "owner": "0x...", "nonce": "42" },
+      "description": "Intent #1 submitted by 0x..."
+    }
+  ]
+}
+```
+
+Errors: `400` (invalid hash), `404` (not found)
+
+---
+
+## Common Parameters
+
+| Parameter | Default | Max | Description |
+|-----------|---------|-----|-------------|
+| `limit` | 50 | 100 | Number of results per page |
+| `offset` | 0 | — | Number of results to skip |
+
+## Notes
+
+- All addresses are normalized to lowercase.
+- NUMERIC/BIGINT values are returned as strings for BigInt safety.
+- All error responses follow the format `{ "error": "message" }`.
+
+
+---
+
+# Local Development Guide
+
+Run the entire Agent-Native L2 stack locally in under 5 minutes.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) (for Anvil + Postgres)
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`, `anvil`)
+- [Node.js](https://nodejs.org/) >= 18
+- PostgreSQL client tools (`psql`, `pg_isready`) — installed with Postgres or Homebrew
+
+## Quick Start (one command)
+
+```bash
+make install   # first time only — installs all deps
+make e2e       # starts infra, deploys, launches services, runs demo
+```
+
+## Step-by-Step
+
+### 1. Install Dependencies
+
+```bash
+make install
+```
+
+### 2. Start Infrastructure
+
+Starts Anvil (local EVM on port 8545) and Postgres (port 5433) via Docker Compose.
+
+```bash
+make up
+```
+
+### 3. Deploy Contracts
+
+Deploys AgentRegistry, IntentBook, and PolicyModule to the local Anvil chain. Writes contract addresses and well-known Anvil keys to `ops/.env.deployed`.
+
+```bash
+make deploy
+```
+
+### 4. Start Services
+
+Starts the indexer, solver, and API as background processes.
+
+```bash
+make services
+```
+
+Services:
+- **Indexer** — polls Anvil for contract events, writes to Postgres
+- **Solver** — watches for open intents, simulates and fills them
+- **API** — REST server on `http://localhost:3000`
+
+Logs are written to `ops/indexer.log`, `ops/solver.log`, `ops/api.log`.
+
+### 5. Run the Demo
+
+Executes the end-to-end demo scenario:
+
+```bash
+make demo
+```
+
+The demo:
+1. Registers an agent identity
+2. Sets spend limit and target allowlist policies
+3. Submits an EIP-712 signed swap intent
+4. Waits for the solver to fill the intent
+5. Queries all API endpoints and prints results
+
+### 6. Tear Down
+
+```bash
+make down    # stop services + infra
+make clean   # also remove volumes and generated files
+```
+
+## Useful Commands
+
+| Command | Description |
+|---------|-------------|
+| `make up` | Start Anvil + Postgres |
+| `make deploy` | Deploy contracts |
+| `make services` | Start indexer/solver/API |
+| `make demo` | Run end-to-end demo |
+| `make down` | Stop everything |
+| `make clean` | Full cleanup |
+| `make logs` | Tail all service logs |
+| `make e2e` | Full end-to-end in one shot |
+
+## Ports
+
+| Service | Port |
+|---------|------|
+| Anvil (RPC) | 8545 |
+| Postgres | 5433 |
+| REST API | 3000 |
+
+## Environment
+
+All services read from `ops/.env.deployed`, which is auto-generated by `make deploy`. To customize, edit the values after deployment or set env vars before starting services.
+
+## Troubleshooting
+
+**Anvil not starting:** Check if port 8545 is in use (`lsof -i :8545`).
+
+**Postgres connection refused:** Ensure Docker is running and port 5433 is free.
+
+**Solver not filling intents:** Check `ops/solver.log`. The solver needs a valid `INTENT_BOOK_ADDRESS`.
+
+**API returns empty results:** The indexer may need a few seconds to catch up. Check `ops/indexer.log`.
+
+
+---
+
+# MCP Server
+
+Cortex includes a Model Context Protocol (MCP) server that exposes chain state as tools for AI agents. The server connects to the same Postgres database as the REST API.
+
+## Server Info
+
+```json
+{
+  "name": "ai-chain",
+  "version": "0.1.0"
+}
+```
+
+## Tools
+
+### lookup_agent
+
+Look up an agent by its numeric ID. Returns owner, metadata, pubkey, capabilities, and revocation status.
+
+**Parameters:** `agentId` (number, required)
+
+**Example:**
+```json
+// Request
+{ "agentId": 1 }
+
+// Response
+{
+  "agent_id": "1",
+  "owner": "0x3c44...",
+  "metadata_uri": "ipfs://agent-meta",
+  "pubkey": "0xaabb",
+  "revoked": false
+}
+```
+
+### list_open_intents
+
+List intents filtered by status. Defaults to OPEN intents. Returns intent details including tokens, amounts, and deadlines.
+
+**Parameters:** `status` (string, optional: "open" | "filled" | "cancelled"), `limit` (number, optional)
+
+**Example:**
+```json
+// Request
+{ "status": "open", "limit": 10 }
+
+// Response: array of intent objects with owner, tokens, amounts, deadline, nonce
+```
+
+### get_policy
+
+Get spending policies for a smart account. Returns spend limits, target allowlists, and function allowlists.
+
+**Parameters:** `account` (string, required — Ethereum address)
+
+**Example:**
+```json
+// Request
+{ "account": "0x70997..." }
+
+// Response: spend limits, target allowlists, and function selector allowlists
+```
+
+### explain_tx
+
+Get a human-readable explanation of a transaction. Returns decoded events and a summary of what happened.
+
+**Parameters:** `txHash` (string, required)
+
+**Example:**
+```json
+// Request
+{ "txHash": "0xabc..." }
+
+// Response
+{
+  "summary": "Transaction contained 1 event(s)",
+  "events": [
+    {
+      "eventName": "IntentSubmitted",
+      "description": "Intent #1 submitted by 0x..."
+    }
+  ]
+}
+```
+
+### lookup_attestation
+
+Look up an attestation by its numeric ID. Returns attester, schema, subject, data hash, and revocation status.
+
+**Parameters:** `attestationId` (number, required)
+
+**Example:**
+```json
+// Request
+{ "attestationId": 1 }
+
+// Response: attester, schema, subject, data hash, and revocation status
+```
+
+## Usage
+
+The MCP server runs as a stdio transport. Connect it to any MCP-compatible client (Claude Desktop, Claude Code, etc.) by adding it to your MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "cortex": {
+      "command": "node",
+      "args": ["mcp/dist/index.js"],
+      "env": {
+        "DATABASE_URL": "postgres://user:pass@localhost:5433/cortex"
+      }
+    }
+  }
+}
+```
+
+
+---
+
+# Design Decisions
+
+Log of key architectural and implementation decisions.
+
+## 1. OP Stack as Rollup Framework
+
+**Decision:** Target OP Stack (Base/OP Sepolia) for deployment.
+
+**Rationale:** Most mature general-purpose L2 framework. Shared sequencer and bridge infrastructure. Large developer ecosystem. Forced inclusion via L1 for censorship resistance.
+
+**Tradeoff:** Less customizable than building a custom rollup. Sufficient for MVP.
+
+## 2. Agent Identity as Contract Records (Not NFTs)
+
+**Decision:** Store agent identity in a simple mapping (`uint256 => AgentRecord`) in `AgentRegistry`.
+
+**Rationale:** Simpler than ERC-721. No transfer semantics needed — agents are permanently tied to their owner. Avoids NFT marketplace confusion.
+
+**Tradeoff:** Cannot transfer agent identity. Acceptable for MVP; could add transfer later if needed.
+
+## 3. EIP-712 Typed Data for Intent Signing
+
+**Decision:** Use EIP-712 with domain separator for intent signing.
+
+**Rationale:** Standard approach for off-chain signatures with on-chain verification. Includes chain ID and contract address for replay protection. Human-readable in wallet UIs.
+
+**Tradeoff:** Requires more gas than simple `keccak256(abi.encodePacked(...))`. Worth it for security and UX.
+
+## 4. Per-Owner Nonce (Not Sequential)
+
+**Decision:** Use a `mapping(address => mapping(uint256 => bool))` for nonce tracking instead of sequential nonces.
+
+**Rationale:** Agents may submit intents from multiple processes concurrently. Sequential nonces would require coordination. Boolean nonces allow any unused value.
+
+**Tradeoff:** Higher storage costs (cannot pack nonces). Acceptable at current scale.
+
+## 5. Lazy Intent Expiration
+
+**Decision:** Check deadline in `fillIntent()` rather than a separate expiration process.
+
+**Rationale:** Simpler. No keeper/cron needed. Expired intents remain OPEN in storage but cannot be filled. `getIntentStatus()` does not check expiry (returns storage value).
+
+**Tradeoff:** Expired intents appear OPEN until someone attempts to fill them. The API/indexer can compute effective status.
+
+## 6. PolicyModule as Separate Contract
+
+**Decision:** Keep PolicyModule as a standalone contract rather than embedding logic in PolicyAccount.
+
+**Rationale:** Multiple accounts can share the same PolicyModule. Policies are upgradeable independently of account code. Cleaner separation of concerns.
+
+**Tradeoff:** Extra call overhead for policy checks. Negligible on L2.
+
+## 7. Single Trusted Solver (MVP)
+
+**Decision:** Run one solver instance operated by the team.
+
+**Rationale:** Simplest path to a working demo. Permissionless solver registration adds complexity (reputation, staking, slashing) without MVP value.
+
+**Tradeoff:** Centralization risk. Documented in threat model. Future: permissionless solver set.
+
+## 8. Express 4 for API
+
+**Decision:** Use Express 4 with raw `pg` queries.
+
+**Rationale:** Lightweight, widely known, stable. No ORM overhead. Consistent with indexer's database access pattern. App factory pattern (`createApp(pool)`) enables test injection.
+
+**Tradeoff:** No built-in validation framework. Manual validation in each route. Acceptable for small endpoint surface.
+
+## 9. Postgres Only (No OpenSearch)
+
+**Decision:** Use Postgres as the sole data store for MVP.
+
+**Rationale:** Sufficient for the query patterns needed. JSONB supports flexible event storage. Simpler operations than running OpenSearch.
+
+**Tradeoff:** Full-text search on metadata would require Postgres FTS or adding OpenSearch later.
+
+## 10. Address Normalization (Lowercase)
+
+**Decision:** Store all addresses as lowercase hex strings in Postgres.
+
+**Rationale:** Avoids case-sensitivity issues in queries. EVM addresses are case-insensitive; checksummed addresses are for display only.
+
+**Tradeoff:** Cannot reconstruct EIP-55 checksum from stored value. Not needed for MVP.
+
+## 11. NUMERIC/BIGINT as Strings in API
+
+**Decision:** Return Postgres NUMERIC and BIGINT values as strings in JSON responses.
+
+**Rationale:** JavaScript `Number` cannot represent values > 2^53. Smart contract values routinely exceed this. String representation preserves precision.
+
+**Tradeoff:** Consumers must parse strings to BigInt. Standard practice in Ethereum tooling.
+
+## 12. Shared Migration File
+
+**Decision:** The API service reads the indexer's `001_init.sql` migration file.
+
+**Rationale:** Single source of truth for schema. Both services need the same tables. Avoids schema drift.
+
+**Tradeoff:** Creates a file-path dependency between services. Mitigated by trying multiple candidate paths and warning if not found.
+
+
+---
+
+# Threat Model
+
+Security analysis for the Agent-Native Ethereum L2. This document covers MVP-level risks, mitigations, and assumptions.
+
+## 1. Bridge / Rollup Risks
+
+**Risk:** As an L2, the system inherits bridge and sequencer trust assumptions from the rollup framework.
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Bridge exploit (token drain) | Critical | OP Stack canonical bridge; rely on L1 security. Monitor bridge balances. |
+| Sequencer censorship | High | OP Stack forced inclusion via L1. Agents can submit L1 fallback txs. |
+| Sequencer liveness failure | High | OP Stack permissionless proposer upgrade path. Document manual override procedure. |
+| Data availability gap | Medium | L1 calldata/blobs ensure state reconstructability. |
+
+**Assumptions:**
+- We deploy on OP Stack (or Base/OP Sepolia) which inherits Ethereum L1 security guarantees.
+- The canonical bridge is the only supported deposit/withdrawal path for MVP.
+
+## 2. Intent Manipulation / Replay
+
+**Risk:** Malicious actors could forge, replay, or front-run intents.
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Intent replay (same chain) | High | Per-owner nonce mapping (`_usedNonces[owner][nonce]`). Once used, permanently consumed. |
+| Intent replay (cross-chain) | Medium | EIP-712 domain includes `chainId` and `verifyingContract`. Intent is chain-bound. |
+| Intent forgery (wrong signer) | High | EIP-712 signature verification via ECDSA.recover. Signer must match `intent.owner`. |
+| Intent front-running | Medium | Solvers see intents on-chain. MVP accepts this; future: encrypted mempools or commit-reveal. |
+| Expired intent fill | Low | `fillIntent()` checks `block.timestamp >= deadline` and reverts with `IntentExpired`. |
+| Constraint violation | Low | `fillIntent()` enforces `amountIn <= amountInMax` and `amountOut >= amountOutMin`. |
+
+**Invariants verified by fuzz/invariant tests:**
+- No intent can be filled twice (`invariant_noDoubleFill`)
+- Nonce replay always reverts (`invariant_nonceReplayProtection`)
+- `filled + cancelled <= submitted` always holds (`invariant_statusConsistency`)
+
+## 3. Solver Censorship or Abuse
+
+**Risk:** A solver could censor specific agents, extract MEV, or grief the system.
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Solver censorship | Medium | MVP: single trusted solver. Future: permissionless solver set with reputation. |
+| Solver MEV extraction | Medium | Constraint enforcement on-chain (amountInMax/amountOutMin). Solver cannot exceed bounds. |
+| Solver griefing (fill with bad data) | Low | Fill constraints checked on-chain. Invalid fills revert. |
+| Solver downtime | Medium | Intents remain OPEN until deadline. Agents can cancel and resubmit. |
+
+**Assumptions:**
+- MVP uses a single, trusted solver operated by the team.
+- MEV protection (encrypted mempools, batch auctions) is deferred to post-MVP.
+
+## 4. Policy Bypass Patterns
+
+**Risk:** Agents or attackers could bypass PolicyModule restrictions.
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| `delegatecall` to untrusted contract | High | PolicyAccount restricts execution to `call` only. `delegatecall` is not exposed. |
+| `approve` + `transferFrom` bypass | Medium | Spend limits track `msg.value` (ETH) via `checkTransaction`. Token approvals require target allowlist. |
+| Spend limit race (multi-tx in same block) | Low | `recordSpend()` uses storage-level cumulative tracking. Multiple calls in one block accumulate correctly. |
+| Rolling window manipulation | Low | Window resets after 24h from `lastResetTimestamp`. Cannot be shortened by the account. |
+| Target allowlist bypass via proxy | Medium | Allowlist checks the direct `target` address. Proxied targets must be explicitly allowlisted. |
+| Function selector collision | Low | 4-byte selectors have collision potential but are practically safe for known interfaces. |
+
+**Invariants verified by fuzz/invariant tests:**
+- `spentToday` never exceeds peak `maxPerDay` (`invariant_spentNeverExceedsPeakMax`)
+- Window reset clears spending correctly (`invariant_windowResetClearsSpend`)
+- Per-token spending is isolated (`invariant_perTokenIsolation`)
+
+## 5. Key Management
+
+**Risk:** Compromised private keys could drain agent accounts or register malicious agents.
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Agent key compromise | Critical | PolicyModule caps daily spending. Target allowlist limits where funds can go. Owner can revoke agent. |
+| Solver key compromise | High | Solver key can only fill intents within constraints. Cannot move funds beyond intent bounds. |
+| Deployer key compromise | High | Contracts are immutable once deployed. Deployer key not privileged after deployment. |
+| Key rotation | Medium | AgentRegistry supports `updateAgent`. PolicyModule policies are per-account, reconfigurable. |
+
+**Assumptions:**
+- Agent keys are managed by the AI agent's runtime environment.
+- MVP does not implement multi-sig or social recovery (deferred).
+- Solver uses a dedicated hot wallet with limited funding.
+
+## 6. Smart Contract Risks
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Reentrancy | Low | No external calls before state changes. Follow checks-effects-interactions. |
+| Integer overflow | Low | Solidity 0.8.24 has built-in overflow checks. |
+| Storage collision | Low | No upgradeable proxies in MVP. Direct deployment. |
+| Uninitialized state | Low | All mappings default to zero/false. Logic handles zero gracefully. |
+
+## 7. Offchain Service Risks
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Indexer data desync | Medium | Indexer tracks `lastProcessedBlock` and resumes from checkpoint. API serves stale-but-safe data. |
+| API injection (SQL) | High | All queries use parameterized statements (`$1`, `$2`). No string interpolation. |
+| API denial of service | Medium | Pagination limits (max 100). No unbounded queries. |
+| Database corruption | Medium | Postgres WAL + standard backup procedures. Indexer migrations are idempotent. |
+
+## Static Analysis
+
+- **Slither** runs in CI to detect common vulnerability patterns.
+- **Solhint** enforces Solidity coding standards.
+- **Forge fmt** ensures consistent formatting.
+- Fuzz tests run 1,000 iterations per property.
+- Invariant tests run 256 sequences of 64 calls each.

@@ -1,0 +1,18 @@
+# Cortex — Agent-Native Ethereum L2
+
+> An EVM-compatible Layer 2 designed for AI agents. Agents have onchain identity, transact via policy-aware smart accounts (ERC-4337), submit intents that solvers execute, and query machine-readable state through an indexing + API layer.
+
+## Docs
+
+- [Getting Started](/docs/getting-started.md): Introduction to Cortex and quick start guide
+- [Architecture](/docs/architecture.md): System diagram, data flow, contract architecture, database schema, and technology stack
+- [Contracts](/docs/contracts.md): Smart contract reference for AgentRegistry, IntentBook, PolicyModule, and PolicyAccount (ERC-4337)
+- [REST API](/docs/api.md): Endpoint reference for agents, intents, policies, and transaction explanations
+- [Local Development](/docs/local-dev.md): Step-by-step guide to running the full stack locally
+- [MCP Server](/docs/mcp.md): Model Context Protocol tools for AI agent integration (lookup_agent, list_open_intents, get_policy, explain_tx, lookup_attestation)
+- [Design Decisions](/docs/decisions.md): 12 key architectural choices with rationale and tradeoffs
+- [Security](/docs/security.md): Threat model covering bridge risks, intent manipulation, solver abuse, policy bypass, key management, and smart contract risks
+
+## Optional
+
+- [Full Documentation](/llms-full.txt): Complete documentation in a single file

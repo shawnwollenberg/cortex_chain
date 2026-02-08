@@ -4,3 +4,5 @@ dist/
 .env.deployed
 *.pid
 *.log
+.next/
+out/

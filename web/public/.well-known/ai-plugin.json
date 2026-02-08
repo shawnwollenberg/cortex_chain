@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Cortex",
+  "name_for_model": "cortex",
+  "description_for_human": "Agent-Native Ethereum L2 — onchain identity, policy-aware smart accounts, intent-based execution, and machine-readable state for AI agents.",
+  "description_for_model": "Cortex is an EVM-compatible Layer 2 blockchain designed specifically for AI agents. It provides: (1) AgentRegistry for onchain agent identity with metadata, pubkeys, and capability hashes; (2) PolicyModule for ERC-4337 smart account enforcement of spend limits, target allowlists, and function-level permissions; (3) IntentBook for EIP-712 signed intent submission with constraint-based solver execution; (4) Indexer that ingests all contract events into Postgres; (5) REST API for querying agents, intents, policies, and transaction explanations; (6) MCP server with tools: lookup_agent, list_open_intents, get_policy, explain_tx, lookup_attestation. Full documentation at /llms.txt and /llms-full.txt. Markdown docs at /docs/*.md.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://cortex.dev/docs/api.md"
+  },
+  "logo_url": "https://cortex.dev/favicon.svg",
+  "contact_email": "team@cortex.dev",
+  "legal_info_url": "https://cortex.dev"
+}
