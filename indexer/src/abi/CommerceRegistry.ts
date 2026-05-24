@@ -1,0 +1,127 @@
+import type { Abi } from "viem";
+
+export const CommerceRegistryABI = [
+  {
+    type: "event",
+    name: "MerchantRegistered",
+    inputs: [
+      { name: "merchantId", type: "uint256", indexed: true },
+      { name: "owner", type: "address", indexed: true },
+      { name: "payoutAddress", type: "address", indexed: true },
+      { name: "metadataURI", type: "string", indexed: false },
+      { name: "metadataHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "MerchantUpdated",
+    inputs: [
+      { name: "merchantId", type: "uint256", indexed: true },
+      { name: "payoutAddress", type: "address", indexed: true },
+      { name: "metadataURI", type: "string", indexed: false },
+      { name: "metadataHash", type: "bytes32", indexed: false },
+      { name: "active", type: "bool", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ServiceRegistered",
+    inputs: [
+      { name: "serviceNumericId", type: "uint256", indexed: true },
+      { name: "merchantId", type: "uint256", indexed: true },
+      { name: "serviceId", type: "string", indexed: false },
+      { name: "metadataURI", type: "string", indexed: false },
+      { name: "metadataHash", type: "bytes32", indexed: false },
+      { name: "capabilityHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ServiceUpdated",
+    inputs: [
+      { name: "serviceNumericId", type: "uint256", indexed: true },
+      { name: "metadataURI", type: "string", indexed: false },
+      { name: "metadataHash", type: "bytes32", indexed: false },
+      { name: "capabilityHash", type: "bytes32", indexed: false },
+      { name: "active", type: "bool", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "FacilitatorRegistered",
+    inputs: [
+      { name: "facilitatorId", type: "uint256", indexed: true },
+      { name: "facilitator", type: "address", indexed: true },
+      { name: "metadataURI", type: "string", indexed: false },
+      { name: "metadataHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "FacilitatorUpdated",
+    inputs: [
+      { name: "facilitatorId", type: "uint256", indexed: true },
+      { name: "facilitator", type: "address", indexed: true },
+      { name: "metadataURI", type: "string", indexed: false },
+      { name: "metadataHash", type: "bytes32", indexed: false },
+      { name: "active", type: "bool", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "QuoteCommitted",
+    inputs: [
+      { name: "quoteHash", type: "bytes32", indexed: true },
+      { name: "merchantId", type: "uint256", indexed: true },
+      { name: "serviceNumericId", type: "uint256", indexed: true },
+      { name: "agent", type: "address", indexed: false },
+      { name: "token", type: "address", indexed: false },
+      { name: "facilitator", type: "address", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "protocolFeeBps", type: "uint16", indexed: false },
+      { name: "protocolFeeAmount", type: "uint256", indexed: false },
+      { name: "expiresAt", type: "uint256", indexed: false },
+      { name: "paymentNonce", type: "uint256", indexed: false },
+      { name: "resourceHash", type: "bytes32", indexed: false },
+      { name: "termsHash", type: "bytes32", indexed: false },
+      { name: "x402PayloadHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ReceiptRecorded",
+    inputs: [
+      { name: "receiptId", type: "uint256", indexed: true },
+      { name: "quoteHash", type: "bytes32", indexed: true },
+      { name: "agent", type: "address", indexed: true },
+      { name: "merchantId", type: "uint256", indexed: false },
+      { name: "serviceNumericId", type: "uint256", indexed: false },
+      { name: "token", type: "address", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "protocolFeeBps", type: "uint16", indexed: false },
+      { name: "protocolFeeAmount", type: "uint256", indexed: false },
+      { name: "facilitator", type: "address", indexed: false },
+      { name: "resultHash", type: "bytes32", indexed: false },
+      { name: "resourceHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "DisputeOpened",
+    inputs: [
+      { name: "disputeId", type: "uint256", indexed: true },
+      { name: "receiptId", type: "uint256", indexed: true },
+      { name: "opener", type: "address", indexed: true },
+      { name: "reasonHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "DisputeResolved",
+    inputs: [
+      { name: "disputeId", type: "uint256", indexed: true },
+      { name: "status", type: "uint8", indexed: false },
+      { name: "resolutionHash", type: "bytes32", indexed: false },
+    ],
+  },
+] as const satisfies Abi;

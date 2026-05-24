@@ -12,15 +12,20 @@ export function createPool(databaseUrl: string): pg.Pool {
 
 export async function runMigrations(pool: pg.Pool): Promise<void> {
   // Try multiple paths to handle both tsx (src/) and compiled (dist/src/) execution
-  const candidates = [
-    resolve(__dirname, "..", "..", "indexer", "migrations", "001_init.sql"),
-    resolve(__dirname, "..", "..", "..", "indexer", "migrations", "001_init.sql"),
+  const migrationDirs = [
+    resolve(__dirname, "..", "..", "indexer", "migrations"),
+    resolve(__dirname, "..", "..", "..", "indexer", "migrations"),
   ];
 
-  for (const migrationPath of candidates) {
-    if (existsSync(migrationPath)) {
-      const sql = readFileSync(migrationPath, "utf-8");
-      await pool.query(sql);
+  for (const migrationDir of migrationDirs) {
+    if (existsSync(resolve(migrationDir, "001_init.sql"))) {
+      for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql"]) {
+        const migrationPath = resolve(migrationDir, file);
+        if (existsSync(migrationPath)) {
+          const sql = readFileSync(migrationPath, "utf-8");
+          await pool.query(sql);
+        }
+      }
       logger.info("Migrations applied");
       return;
     }

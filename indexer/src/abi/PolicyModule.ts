@@ -14,6 +14,41 @@ export const PolicyModuleABI = [
   },
   {
     type: "function",
+    name: "getTokenSpend",
+    inputs: [
+      { name: "target", type: "address", internalType: "address" },
+      { name: "data", type: "bytes", internalType: "bytes" },
+    ],
+    outputs: [
+      { name: "token", type: "address", internalType: "address" },
+      { name: "amount", type: "uint256", internalType: "uint256" },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "guardianOf",
+    inputs: [
+      { name: "account", type: "address", internalType: "address" },
+    ],
+    outputs: [
+      { name: "", type: "address", internalType: "address" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isAccountFrozen",
+    inputs: [
+      { name: "account", type: "address", internalType: "address" },
+    ],
+    outputs: [
+      { name: "", type: "bool", internalType: "bool" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "getSpendLimit",
     inputs: [
       { name: "account", type: "address", internalType: "address" },
@@ -82,11 +117,69 @@ export const PolicyModuleABI = [
   },
   {
     type: "function",
+    name: "checkSignedPayment",
+    inputs: [
+      { name: "merchant", type: "address", internalType: "address" },
+      { name: "token", type: "address", internalType: "address" },
+      { name: "facilitator", type: "address", internalType: "address" },
+      { name: "amount", type: "uint256", internalType: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "recordSignedPayment",
+    inputs: [
+      { name: "merchant", type: "address", internalType: "address" },
+      { name: "token", type: "address", internalType: "address" },
+      { name: "facilitator", type: "address", internalType: "address" },
+      { name: "amount", type: "uint256", internalType: "uint256" },
+      { name: "paymentHash", type: "bytes32", internalType: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setPaymentPolicy",
+    inputs: [
+      { name: "merchant", type: "address", internalType: "address" },
+      { name: "token", type: "address", internalType: "address" },
+      { name: "facilitator", type: "address", internalType: "address" },
+      { name: "maxPerPayment", type: "uint256", internalType: "uint256" },
+      { name: "maxPerDay", type: "uint256", internalType: "uint256" },
+      { name: "allowed", type: "bool", internalType: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setAccountFrozen",
+    inputs: [
+      { name: "account", type: "address", internalType: "address" },
+      { name: "frozen", type: "bool", internalType: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "setFunctionAllowed",
     inputs: [
       { name: "target", type: "address", internalType: "address" },
       { name: "selector", type: "bytes4", internalType: "bytes4" },
       { name: "allowed", type: "bool", internalType: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setGuardian",
+    inputs: [
+      { name: "guardian", type: "address", internalType: "address" },
     ],
     outputs: [],
     stateMutability: "nonpayable",
@@ -122,12 +215,39 @@ export const PolicyModuleABI = [
   },
   {
     type: "event",
+    name: "AccountFrozen",
+    inputs: [
+      { name: "account", type: "address", indexed: true, internalType: "address" },
+      { name: "frozen", type: "bool", indexed: false, internalType: "bool" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "FunctionAllowlistModeUpdated",
+    inputs: [
+      { name: "account", type: "address", indexed: true, internalType: "address" },
+      { name: "enabled", type: "bool", indexed: false, internalType: "bool" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "FunctionAllowlistUpdated",
     inputs: [
       { name: "account", type: "address", indexed: true, internalType: "address" },
       { name: "target", type: "address", indexed: true, internalType: "address" },
       { name: "selector", type: "bytes4", indexed: false, internalType: "bytes4" },
       { name: "allowed", type: "bool", indexed: false, internalType: "bool" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "GuardianSet",
+    inputs: [
+      { name: "account", type: "address", indexed: true, internalType: "address" },
+      { name: "guardian", type: "address", indexed: true, internalType: "address" },
     ],
     anonymous: false,
   },
@@ -143,11 +263,46 @@ export const PolicyModuleABI = [
   },
   {
     type: "event",
+    name: "PaymentPolicySet",
+    inputs: [
+      { name: "account", type: "address", indexed: true, internalType: "address" },
+      { name: "merchant", type: "address", indexed: true, internalType: "address" },
+      { name: "token", type: "address", indexed: true, internalType: "address" },
+      { name: "facilitator", type: "address", indexed: false, internalType: "address" },
+      { name: "maxPerPayment", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "maxPerDay", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "allowed", type: "bool", indexed: false, internalType: "bool" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "AccountFrozenError",
+    inputs: [
+      { name: "account", type: "address", internalType: "address" },
+    ],
+  },
+  {
+    type: "event",
     name: "SpendRecorded",
     inputs: [
       { name: "account", type: "address", indexed: true, internalType: "address" },
       { name: "token", type: "address", indexed: true, internalType: "address" },
       { name: "amount", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "dailyTotal", type: "uint256", indexed: false, internalType: "uint256" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SignedPaymentRecorded",
+    inputs: [
+      { name: "account", type: "address", indexed: true, internalType: "address" },
+      { name: "merchant", type: "address", indexed: true, internalType: "address" },
+      { name: "token", type: "address", indexed: true, internalType: "address" },
+      { name: "facilitator", type: "address", indexed: false, internalType: "address" },
+      { name: "amount", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "paymentHash", type: "bytes32", indexed: false, internalType: "bytes32" },
       { name: "dailyTotal", type: "uint256", indexed: false, internalType: "uint256" },
     ],
     anonymous: false,

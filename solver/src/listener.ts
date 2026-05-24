@@ -6,6 +6,9 @@ import { logger } from "./logger.js";
 const INTENT_SUBMITTED_EVENT = parseAbiItem(
   "event IntentSubmitted(uint256 indexed intentId, address indexed owner, uint256 nonce)",
 );
+const SOLVER_BID_SELECTED_EVENT = parseAbiItem(
+  "event SolverBidSelected(uint256 indexed intentId, uint256 indexed bidId, address indexed solver)",
+);
 
 export class IntentListener {
   private lastProcessedBlock: bigint;
@@ -31,22 +34,35 @@ export class IntentListener {
 
       logger.debug(`Polling blocks ${fromBlock}–${currentBlock}`);
 
-      const logs = await this.client.getLogs({
+      const intentLogs = await this.client.getLogs({
         address: this.intentBookAddress,
         event: INTENT_SUBMITTED_EVENT,
+        fromBlock,
+        toBlock: currentBlock,
+      });
+      const selectedLogs = await this.client.getLogs({
+        address: this.intentBookAddress,
+        event: SOLVER_BID_SELECTED_EVENT,
         fromBlock,
         toBlock: currentBlock,
       });
 
       this.lastProcessedBlock = currentBlock;
 
-      const events: IntentSubmittedEvent[] = logs.map((log) => ({
+      const events: IntentSubmittedEvent[] = intentLogs.map((log) => ({
         intentId: log.args.intentId!,
         owner: log.args.owner!,
         nonce: log.args.nonce!,
         blockNumber: log.blockNumber,
         transactionHash: log.transactionHash,
       }));
+      events.push(...selectedLogs.map((log) => ({
+        intentId: log.args.intentId!,
+        owner: log.args.solver!,
+        nonce: log.args.bidId!,
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+      })));
 
       if (events.length > 0) {
         logger.info(`Found ${events.length} IntentSubmitted event(s)`);

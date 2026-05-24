@@ -16,6 +16,20 @@ export async function runMigrations(pool: pg.Pool): Promise<void> {
   await pool.query(migration001);
   const migration002 = readFileSync(resolve(migrationsDir, "002_attestations.sql"), "utf-8");
   await pool.query(migration002);
+  const migration003 = readFileSync(resolve(migrationsDir, "003_participants.sql"), "utf-8");
+  await pool.query(migration003);
+  const migration004 = readFileSync(resolve(migrationsDir, "004_intent_metadata.sql"), "utf-8");
+  await pool.query(migration004);
+  const migration005 = readFileSync(resolve(migrationsDir, "005_pending_intent_metadata.sql"), "utf-8");
+  await pool.query(migration005);
+  const migration006 = readFileSync(resolve(migrationsDir, "006_bids_attestation_schemas.sql"), "utf-8");
+  await pool.query(migration006);
+  const migration007 = readFileSync(resolve(migrationsDir, "007_onchain_intent_commitments.sql"), "utf-8");
+  await pool.query(migration007);
+  const migration008 = readFileSync(resolve(migrationsDir, "008_fill_proofs.sql"), "utf-8");
+  await pool.query(migration008);
+  const migration009 = readFileSync(resolve(migrationsDir, "009_commerce.sql"), "utf-8");
+  await pool.query(migration009);
   logger.info("Migrations applied");
 }
 

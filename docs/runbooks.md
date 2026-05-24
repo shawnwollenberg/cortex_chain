@@ -33,7 +33,7 @@ tail -100 ops/solver.log
 tail -100 ops/api.log
 ```
 
-If the indexer crashed, it will resume from its last checkpoint (`_meta.last_processed_block` in Postgres). No data loss.
+If the indexer crashed, it will resume from its last checkpoint (`indexer_state.last_processed_block` in Postgres). No data loss.
 
 If the solver crashed, open intents remain OPEN on-chain. The solver will pick them up when restarted.
 
@@ -59,7 +59,7 @@ psql "postgresql://ai_chain:ai_chain@localhost:5433/ai_chain"
 ### Check Indexer Progress
 
 ```sql
-SELECT * FROM _meta;
+SELECT * FROM indexer_state;
 ```
 
 ### View Recent Intents
@@ -84,7 +84,7 @@ ORDER BY policy_type;
 If the indexer gets out of sync:
 
 ```sql
-TRUNCATE agents, intents, fills, policies, tx_receipts, _meta;
+TRUNCATE agents, intents, fills, policies, tx_receipts, indexer_state;
 ```
 
 Then restart the indexer — it will re-index from block 0.

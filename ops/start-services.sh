@@ -2,14 +2,15 @@
 set -euo pipefail
 
 # Start indexer, solver, and API as background processes.
-# Reads config from ops/.env.deployed (written by deploy.sh).
+# Reads config from ops/.env.deployed by default, or ENV_FILE if provided.
 # PID files are stored in ops/*.pid for stop-services.sh.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-ENV_FILE="$SCRIPT_DIR/.env.deployed"
+ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.deployed}"
 
 API_PORT="${API_PORT:-3001}"
+API_URL="${API_URL:-http://localhost:$API_PORT}"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "ERROR: $ENV_FILE not found. Run deploy.sh first."
@@ -44,6 +45,13 @@ echo "    Postgres ready"
 echo "==> Running migrations..."
 psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/001_init.sql" -q 2>/dev/null || true
 psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/002_attestations.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/003_participants.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/004_intent_metadata.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/005_pending_intent_metadata.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/006_bids_attestation_schemas.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/007_onchain_intent_commitments.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/008_fill_proofs.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/009_commerce.sql" -q 2>/dev/null || true
 echo "    Migrations applied"
 
 # --- Indexer ---
@@ -55,10 +63,13 @@ AGENT_REGISTRY_ADDRESS="$AGENT_REGISTRY_ADDRESS" \
 INTENT_BOOK_ADDRESS="$INTENT_BOOK_ADDRESS" \
 POLICY_MODULE_ADDRESS="$POLICY_MODULE_ADDRESS" \
 ATTESTATION_REGISTRY_ADDRESS="${ATTESTATION_REGISTRY_ADDRESS:-}" \
+SOLVER_REGISTRY_ADDRESS="${SOLVER_REGISTRY_ADDRESS:-}" \
+ATTESTOR_REGISTRY_ADDRESS="${ATTESTOR_REGISTRY_ADDRESS:-}" \
+COMMERCE_REGISTRY_ADDRESS="${COMMERCE_REGISTRY_ADDRESS:-}" \
 POLL_INTERVAL_MS=500 \
 START_BLOCK=0 \
 LOG_LEVEL=info \
-  node dist/src/index.js > "$SCRIPT_DIR/indexer.log" 2>&1 &
+  nohup node dist/src/index.js > "$SCRIPT_DIR/indexer.log" 2>&1 &
 echo $! > "$SCRIPT_DIR/indexer.pid"
 echo "    Indexer PID: $(cat "$SCRIPT_DIR/indexer.pid")"
 
@@ -68,10 +79,11 @@ cd "$ROOT_DIR/solver"
 RPC_URL="$RPC_URL" \
 SOLVER_PRIVATE_KEY="$SOLVER_PRIVATE_KEY" \
 INTENT_BOOK_ADDRESS="$INTENT_BOOK_ADDRESS" \
+API_URL="$API_URL" \
 POLL_INTERVAL_MS=500 \
 START_BLOCK=0 \
 LOG_LEVEL=info \
-  node dist/src/index.js > "$SCRIPT_DIR/solver.log" 2>&1 &
+  nohup node dist/src/index.js > "$SCRIPT_DIR/solver.log" 2>&1 &
 echo $! > "$SCRIPT_DIR/solver.pid"
 echo "    Solver PID: $(cat "$SCRIPT_DIR/solver.pid")"
 
@@ -81,7 +93,7 @@ cd "$ROOT_DIR/api"
 PORT="$API_PORT" \
 DATABASE_URL="$DATABASE_URL" \
 LOG_LEVEL=info \
-  node dist/src/index.js > "$SCRIPT_DIR/api.log" 2>&1 &
+  nohup node dist/src/index.js > "$SCRIPT_DIR/api.log" 2>&1 &
 echo $! > "$SCRIPT_DIR/api.pid"
 echo "    API PID: $(cat "$SCRIPT_DIR/api.pid")"
 

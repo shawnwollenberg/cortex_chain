@@ -6,6 +6,9 @@ import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {IntentBook} from "../src/IntentBook.sol";
 import {PolicyModule} from "../src/PolicyModule.sol";
 import {AttestationRegistry} from "../src/AttestationRegistry.sol";
+import {SolverRegistry} from "../src/SolverRegistry.sol";
+import {AttestorRegistry} from "../src/AttestorRegistry.sol";
+import {CommerceRegistry} from "../src/CommerceRegistry.sol";
 
 contract Deploy is Script {
     function run() external {
@@ -14,14 +17,23 @@ contract Deploy is Script {
         AgentRegistry registry = new AgentRegistry();
         console.log("AgentRegistry deployed at:", address(registry));
 
-        IntentBook intentBook = new IntentBook();
-        console.log("IntentBook deployed at:", address(intentBook));
-
         PolicyModule policyModule = new PolicyModule();
         console.log("PolicyModule deployed at:", address(policyModule));
 
         AttestationRegistry attestationRegistry = new AttestationRegistry();
         console.log("AttestationRegistry deployed at:", address(attestationRegistry));
+
+        IntentBook intentBook = new IntentBook(address(attestationRegistry));
+        console.log("IntentBook deployed at:", address(intentBook));
+
+        SolverRegistry solverRegistry = new SolverRegistry();
+        console.log("SolverRegistry deployed at:", address(solverRegistry));
+
+        AttestorRegistry attestorRegistry = new AttestorRegistry();
+        console.log("AttestorRegistry deployed at:", address(attestorRegistry));
+
+        CommerceRegistry commerceRegistry = new CommerceRegistry();
+        console.log("CommerceRegistry deployed at:", address(commerceRegistry));
 
         vm.stopBroadcast();
     }

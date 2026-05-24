@@ -11,7 +11,7 @@ CONTRACTS_DIR="$ROOT_DIR/contracts"
 ENV_FILE="$SCRIPT_DIR/.env.deployed"
 
 RPC_URL="${1:-http://127.0.0.1:8545}"
-DATABASE_URL="${DATABASE_URL:-postgres://localhost:5432/ai_chain}"
+DATABASE_URL="${DATABASE_URL:-postgresql://ai_chain:ai_chain@localhost:5433/ai_chain}"
 
 # Anvil account 0 — deployer
 DEPLOYER_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -48,16 +48,22 @@ if [ ! -f "$BROADCAST_FILE" ]; then
 fi
 
 # Extract contract addresses in deployment order
-# Deploy.s.sol creates: AgentRegistry, IntentBook, PolicyModule, AttestationRegistry
+# Deploy.s.sol creates: AgentRegistry, PolicyModule, AttestationRegistry, IntentBook, SolverRegistry, AttestorRegistry, CommerceRegistry
 AGENT_REGISTRY=$(jq -r '.transactions[0].contractAddress' "$BROADCAST_FILE")
-INTENT_BOOK=$(jq -r '.transactions[1].contractAddress' "$BROADCAST_FILE")
-POLICY_MODULE=$(jq -r '.transactions[2].contractAddress' "$BROADCAST_FILE")
-ATTESTATION_REGISTRY=$(jq -r '.transactions[3].contractAddress' "$BROADCAST_FILE")
+POLICY_MODULE=$(jq -r '.transactions[1].contractAddress' "$BROADCAST_FILE")
+ATTESTATION_REGISTRY=$(jq -r '.transactions[2].contractAddress' "$BROADCAST_FILE")
+INTENT_BOOK=$(jq -r '.transactions[3].contractAddress' "$BROADCAST_FILE")
+SOLVER_REGISTRY=$(jq -r '.transactions[4].contractAddress' "$BROADCAST_FILE")
+ATTESTOR_REGISTRY=$(jq -r '.transactions[5].contractAddress' "$BROADCAST_FILE")
+COMMERCE_REGISTRY=$(jq -r '.transactions[6].contractAddress' "$BROADCAST_FILE")
 
 echo "    AgentRegistry:        $AGENT_REGISTRY"
 echo "    IntentBook:           $INTENT_BOOK"
 echo "    PolicyModule:         $POLICY_MODULE"
 echo "    AttestationRegistry:  $ATTESTATION_REGISTRY"
+echo "    SolverRegistry:       $SOLVER_REGISTRY"
+echo "    AttestorRegistry:     $ATTESTOR_REGISTRY"
+echo "    CommerceRegistry:     $COMMERCE_REGISTRY"
 
 # Write .env.deployed for services and demo
 cat > "$ENV_FILE" <<EOF
@@ -68,6 +74,9 @@ AGENT_REGISTRY_ADDRESS=$AGENT_REGISTRY
 INTENT_BOOK_ADDRESS=$INTENT_BOOK
 POLICY_MODULE_ADDRESS=$POLICY_MODULE
 ATTESTATION_REGISTRY_ADDRESS=$ATTESTATION_REGISTRY
+SOLVER_REGISTRY_ADDRESS=$SOLVER_REGISTRY
+ATTESTOR_REGISTRY_ADDRESS=$ATTESTOR_REGISTRY
+COMMERCE_REGISTRY_ADDRESS=$COMMERCE_REGISTRY
 
 # Anvil account 0 — deployer
 DEPLOYER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80

@@ -64,7 +64,8 @@ AGENT_PRIVATE_KEY=0x<your-agent-private-key>`}</CodeBlock>
       <CodeBlock language="bash">{`source ops/.env.testnet
 ./ops/deploy-testnet.sh`}</CodeBlock>
       <p className="text-sm text-muted mt-3 mb-8">
-        Deploys AgentRegistry, IntentBook, PolicyModule, and AttestationRegistry to Base Sepolia.
+        Deploys AgentRegistry, IntentBook, PolicyModule, AttestationRegistry, SolverRegistry,
+        AttestorRegistry, and CommerceRegistry to Base Sepolia.
         Contract addresses are written to <code>ops/.env.testnet</code>.
       </p>
 
@@ -83,9 +84,12 @@ AGENT_PRIVATE_KEY=0x<your-agent-private-key>`}</CodeBlock>
 
       <h2 className="text-xl font-semibold mb-4">5. Run Migrations</h2>
       <CodeBlock language="bash">{`source ops/.env.testnet
-psql "$DATABASE_URL" -f indexer/migrations/001_init.sql`}</CodeBlock>
+for file in indexer/migrations/*.sql; do
+  psql "$DATABASE_URL" -f "$file"
+done`}</CodeBlock>
       <p className="text-sm text-muted mt-3 mb-8">
-        Creates the <code>agents</code>, <code>intents</code>, <code>fills</code>, <code>policies</code>, and <code>tx_receipts</code> tables.
+        Creates the identity, intent, policy, attestation, participant, commerce, quote, receipt,
+        dispute, and analytics source tables.
       </p>
 
       <h2 className="text-xl font-semibold mb-4">6. Start Services</h2>
@@ -120,12 +124,21 @@ cd ../api && npm run build && nohup node dist/index.js > ../ops/api.log 2>&1 &`}
       <h3 className="text-lg font-semibold mb-2">Hit the API</h3>
       <CodeBlock language="bash">{`# Health check
 curl http://localhost:3001/health
+curl http://localhost:3001/analytics/commerce
 
 # List agents
 curl http://localhost:3001/agents?owner=0x0000000000000000000000000000000000000000
 
 # List open intents
 curl http://localhost:3001/intents?status=open`}</CodeBlock>
+
+      <h3 className="text-lg font-semibold mb-2 mt-6">Start the dashboard</h3>
+      <CodeBlock language="bash">{`cd web
+NEXT_PUBLIC_API_URL=http://localhost:3001 npm run dev`}</CodeBlock>
+      <p className="text-sm text-muted mt-3 mb-8">
+        Open <code>http://localhost:3000/dashboard</code>. Protocol fees should show <code>0</code>
+        until a future fee switch is intentionally added.
+      </p>
 
       <h3 className="text-lg font-semibold mb-2 mt-6">Register a test agent</h3>
       <CodeBlock language="bash">{`source ops/.env.testnet

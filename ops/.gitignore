@@ -1,3 +1,4 @@
 .env.deployed
+.env.testnet
 *.pid
 *.log

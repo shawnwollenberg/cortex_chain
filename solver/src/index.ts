@@ -50,6 +50,7 @@ async function main(): Promise<void> {
     publicClient,
     walletClient,
     config.intentBookAddress,
+    config.apiUrl,
   );
 
   logger.info(

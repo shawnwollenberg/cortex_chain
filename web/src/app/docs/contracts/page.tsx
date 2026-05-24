@@ -3,7 +3,7 @@ import CodeBlock from "@/components/CodeBlock";
 
 export const metadata: Metadata = {
   title: "Contracts Reference — Cortex Docs",
-  description: "Smart contract interfaces for AgentRegistry, IntentBook, PolicyModule, and PolicyAccount.",
+  description: "Smart contract interfaces for Cortex identity, policy, intent, participant, and commerce primitives.",
   alternates: { types: { "text/markdown": "/docs/contracts.md" } },
 };
 
@@ -12,7 +12,7 @@ export default function ContractsPage() {
     <div>
       <h1 className="text-3xl font-bold mb-4">Contracts Reference</h1>
       <p className="text-muted mb-10">
-        Four core contracts make up the onchain layer: AgentRegistry, IntentBook, PolicyModule, and PolicyAccount.
+        Cortex combines identity, policy, intents, participant registries, and commerce primitives into an onchain protocol layer.
       </p>
 
       {/* AgentRegistry */}
@@ -116,6 +116,8 @@ error InvalidSignature();    // recovered signer != intent.owner`}</CodeBlock>
             <tr><td className="py-2 pr-4 font-mono text-xs">setTargetAllowed(target, allowed)</td><td className="py-2 pr-4">Account</td><td className="py-2 text-muted">Add/remove target from allowlist.</td></tr>
             <tr><td className="py-2 pr-4 font-mono text-xs">setFunctionAllowed(target, selector, allowed)</td><td className="py-2 pr-4">Account</td><td className="py-2 text-muted">Allow/disallow function selector on target.</td></tr>
             <tr><td className="py-2 pr-4 font-mono text-xs">setUseFunctionAllowlist(enabled)</td><td className="py-2 pr-4">Account</td><td className="py-2 text-muted">Enable/disable function-level checks.</td></tr>
+            <tr><td className="py-2 pr-4 font-mono text-xs">setSignedPaymentPolicy(...)</td><td className="py-2 pr-4">Account</td><td className="py-2 text-muted">Configure facilitator/x402-style delegated payment budgets.</td></tr>
+            <tr><td className="py-2 pr-4 font-mono text-xs">recordSignedPayment(...)</td><td className="py-2 pr-4">Account</td><td className="py-2 text-muted">Record signed payment spend and payment-hash replay protection.</td></tr>
             <tr><td className="py-2 pr-4 font-mono text-xs">checkTransaction(target, value, data)</td><td className="py-2 pr-4">View</td><td className="py-2 text-muted">Validate against all policies.</td></tr>
             <tr><td className="py-2 pr-4 font-mono text-xs">recordSpend(token, amount)</td><td className="py-2 pr-4">Account</td><td className="py-2 text-muted">Record spending against daily limit.</td></tr>
             <tr><td className="py-2 pr-4 font-mono text-xs">getSpendLimit(account, token)</td><td className="py-2 pr-4">View</td><td className="py-2 text-muted">Get spend limit config.</td></tr>
@@ -146,6 +148,8 @@ error DelegateCallNotAllowed();`}</CodeBlock>
         <li><code>maxPerDay = 0</code> means no limit configured (allows freely)</li>
         <li>Limits are per-account, per-token</li>
         <li><code>address(0)</code> represents native ETH</li>
+        <li>Wallet transfers and swaps use normal target/function policy plus spend limits</li>
+        <li>Facilitator-mediated and x402 payments use signed payment policies</li>
       </ul>
 
       <hr className="border-border my-10" />
@@ -168,6 +172,47 @@ error DelegateCallNotAllowed();`}</CodeBlock>
       <p className="text-sm text-muted">
         The account checks <code>PolicyModule.checkTransaction()</code> before executing any call
         and records ETH spend via <code>PolicyModule.recordSpend()</code>.
+      </p>
+
+      <hr className="border-border my-10" />
+
+      <h2 className="text-2xl font-semibold mb-4" id="participants">SolverRegistry and AttestorRegistry</h2>
+      <p className="text-sm text-muted mb-6">
+        Permissionless registries expose solver operators and attestors with metadata, capability/schema hashes, active status, and indexed performance counters.
+      </p>
+      <CodeBlock language="solidity">{`event SolverRegistered(uint256 indexed solverId, address indexed operator, string metadataURI, bytes32 capabilitiesHash, uint256 bond);
+event AttestorRegistered(uint256 indexed attestorId, address indexed operator, string metadataURI, bytes32 schemasHash);`}</CodeBlock>
+
+      <hr className="border-border my-10" />
+
+      <h2 className="text-2xl font-semibold mb-4" id="commerce-registry">CommerceRegistry</h2>
+      <p className="text-sm text-muted mb-6">
+        Registers merchants, services, payment facilitators, canonical quote commitments, receipts, and disputes for agentic commerce.
+      </p>
+      <h3 className="text-lg font-semibold mb-3">Quote Commitment</h3>
+      <CodeBlock language="solidity">{`struct QuoteCommitment {
+    uint256 merchantId;
+    uint256 serviceNumericId;
+    address agent;
+    address token;
+    address facilitator;
+    uint256 amount;
+    uint256 expiresAt;
+    uint256 paymentNonce;
+    bytes32 resourceHash;
+    bytes32 termsHash;
+    bytes32 x402PayloadHash;
+}`}</CodeBlock>
+      <p className="text-sm text-muted mt-3 mb-6">
+        The quote hash binds chain ID, registry address, service terms, payment terms, and protocol fee terms. Basic transfers and swaps bind through policy and terms hashes; x402 flows additionally bind the x402 payload hash.
+      </p>
+      <h3 className="text-lg font-semibold mb-3">Events</h3>
+      <CodeBlock language="solidity">{`event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash);
+event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash);
+event DisputeOpened(uint256 indexed disputeId, uint256 indexed receiptId, address indexed opener, bytes32 reasonHash);
+event DisputeResolved(uint256 indexed disputeId, DisputeStatus status, bytes32 resolutionHash);`}</CodeBlock>
+      <p className="text-sm text-muted mt-3">
+        <code>PROTOCOL_FEE_BPS</code> is currently <code>0</code>. Fee fields are emitted and indexed for analytics without charging early usage.
       </p>
     </div>
   );

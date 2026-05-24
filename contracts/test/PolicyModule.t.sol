@@ -13,6 +13,8 @@ contract PolicyModuleTest is Test {
     address public targetA = makeAddr("targetA");
     address public targetB = makeAddr("targetB");
     address public tokenX = makeAddr("tokenX");
+    address public merchant = makeAddr("merchant");
+    address public facilitator = makeAddr("facilitator");
 
     function setUp() public {
         module = new PolicyModule();
@@ -34,6 +36,50 @@ contract PolicyModuleTest is Test {
         vm.expectEmit(true, true, false, true);
         emit IPolicyModule.SpendLimitSet(account, address(0), 1 ether);
         module.setSpendLimit(address(0), 1 ether);
+    }
+
+    function test_signedPaymentPolicy_allowsAndRecordsX402StylePayment() public {
+        vm.startPrank(account);
+        module.setPaymentPolicy(merchant, tokenX, facilitator, 100, 250, true);
+        module.checkSignedPayment(merchant, tokenX, facilitator, 100);
+        module.recordSignedPayment(merchant, tokenX, facilitator, 100, keccak256("x402-payment"));
+
+        IPolicyModule.PaymentPolicy memory policy = module.getPaymentPolicy(account, merchant, tokenX, facilitator);
+        assertEq(policy.spentToday, 100);
+        vm.stopPrank();
+    }
+
+    function test_signedPaymentPolicy_revertIfNotAllowed() public {
+        vm.prank(account);
+        vm.expectRevert(abi.encodeWithSelector(IPolicyModule.PaymentNotAllowed.selector, merchant, tokenX, facilitator));
+        module.checkSignedPayment(merchant, tokenX, facilitator, 1);
+    }
+
+    function test_signedPaymentPolicy_revertIfPaymentLimitExceeded() public {
+        vm.startPrank(account);
+        module.setPaymentPolicy(merchant, tokenX, facilitator, 100, 250, true);
+        vm.expectRevert(abi.encodeWithSelector(IPolicyModule.PaymentAmountExceeded.selector, tokenX, 101, 100));
+        module.checkSignedPayment(merchant, tokenX, facilitator, 101);
+        vm.stopPrank();
+    }
+
+    function test_signedPaymentPolicy_revertIfDailyLimitExceeded() public {
+        vm.startPrank(account);
+        module.setPaymentPolicy(merchant, tokenX, facilitator, 0, 250, true);
+        module.recordSignedPayment(merchant, tokenX, facilitator, 200, keccak256("first"));
+        vm.expectRevert(abi.encodeWithSelector(IPolicyModule.PaymentAmountExceeded.selector, tokenX, 60, 50));
+        module.recordSignedPayment(merchant, tokenX, facilitator, 60, keccak256("second"));
+        vm.stopPrank();
+    }
+
+    function test_signedPaymentPolicy_revertReplay() public {
+        bytes32 paymentHash = keccak256("x402-payment");
+        vm.startPrank(account);
+        module.setPaymentPolicy(merchant, tokenX, facilitator, 100, 250, true);
+        module.recordSignedPayment(merchant, tokenX, facilitator, 100, paymentHash);
+        vm.expectRevert(abi.encodeWithSelector(IPolicyModule.PaymentAlreadyRecorded.selector, paymentHash));
+        module.recordSignedPayment(merchant, tokenX, facilitator, 100, paymentHash);
+        vm.stopPrank();
     }
 
     function test_recordSpend_withinLimit() public {

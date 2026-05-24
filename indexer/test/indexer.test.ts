@@ -191,6 +191,13 @@ describe("Indexer integration", () => {
         deadline,
         slippageBps: 100,
       },
+      execution: {
+        target: "0x0000000000000000000000000000000000000000" as Address,
+        dataHash: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+        requiredAttestationSubject: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+        requiredAttestationSchema: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+        metadataURIHash: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+      },
       inputToken: "0x0000000000000000000000000000000000000001" as Address,
       outputToken: "0x0000000000000000000000000000000000000002" as Address,
       nonce: 1n,
@@ -214,6 +221,7 @@ describe("Indexer integration", () => {
           { name: "owner", type: "address" },
           { name: "intentType", type: "uint8" },
           { name: "constraints", type: "Constraints" },
+          { name: "execution", type: "ExecutionRequirements" },
           { name: "inputToken", type: "address" },
           { name: "outputToken", type: "address" },
           { name: "nonce", type: "uint256" },
@@ -223,6 +231,13 @@ describe("Indexer integration", () => {
           { name: "amountOutMin", type: "uint256" },
           { name: "deadline", type: "uint256" },
           { name: "slippageBps", type: "uint16" },
+        ],
+        ExecutionRequirements: [
+          { name: "target", type: "address" },
+          { name: "dataHash", type: "bytes32" },
+          { name: "requiredAttestationSubject", type: "bytes32" },
+          { name: "requiredAttestationSchema", type: "bytes32" },
+          { name: "metadataURIHash", type: "bytes32" },
         ],
       },
       primaryType: "Intent",
@@ -254,12 +269,45 @@ describe("Indexer integration", () => {
     }
     expect(intentId).toBeGreaterThan(0n);
 
+    const { request: bidReq } = await publicClient.simulateContract({
+      address: intentBookAddress,
+      abi: IntentBookABI,
+      functionName: "submitBid",
+      args: [intentId, 1000n, 950n, 0n, deadline, intent.execution.dataHash],
+      account: solverAccount,
+    });
+    const bidTx = await solverWallet.writeContract(bidReq);
+    const bidReceipt = await publicClient.waitForTransactionReceipt({ hash: bidTx });
+    let bidId = 0n;
+    for (const log of bidReceipt.logs) {
+      try {
+        const decoded = decodeEventLog({ abi: IntentBookABI, data: log.data, topics: log.topics });
+        if (decoded.eventName === "SolverBidSubmitted") {
+          bidId = (decoded.args as { bidId: bigint }).bidId;
+        }
+      } catch { /* not matching */ }
+    }
+    expect(bidId).toBeGreaterThan(0n);
+
+    const { request: selectReq } = await publicClient.simulateContract({
+      address: intentBookAddress,
+      abi: IntentBookABI,
+      functionName: "selectBid",
+      args: [intentId, bidId],
+      account: agentAccount,
+    });
+    const selectTx = await agentWallet.writeContract(selectReq);
+    await publicClient.waitForTransactionReceipt({ hash: selectTx });
+
     // Fill intent
     const fill = {
       amountIn: 1000n,
       amountOut: 950n,
       solver: solverAccount.address,
       executionData: "0x" as Hex,
+      resultHash: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+      traceHash: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+      attestationId: 0n,
     };
     const { request: fillReq } = await publicClient.simulateContract({
       address: intentBookAddress,

@@ -35,6 +35,15 @@ async function main(): Promise<void> {
   if (config.attestationRegistryAddress) {
     logger.info(`AttestationRegistry:  ${config.attestationRegistryAddress}`);
   }
+  if (config.solverRegistryAddress) {
+    logger.info(`SolverRegistry:       ${config.solverRegistryAddress}`);
+  }
+  if (config.attestorRegistryAddress) {
+    logger.info(`AttestorRegistry:     ${config.attestorRegistryAddress}`);
+  }
+  if (config.commerceRegistryAddress) {
+    logger.info(`CommerceRegistry:     ${config.commerceRegistryAddress}`);
+  }
   logger.info(`Current block: ${currentBlock}`);
   logger.info(`Start block:   ${startBlock}${lastBlock !== null ? " (resumed)" : ""}`);
 
@@ -46,6 +55,9 @@ async function main(): Promise<void> {
     config.policyModuleAddress,
     startBlock,
     config.attestationRegistryAddress,
+    config.solverRegistryAddress,
+    config.attestorRegistryAddress,
+    config.commerceRegistryAddress,
   );
 
   logger.info(`Starting polling loop (interval=${config.pollIntervalMs}ms)`);

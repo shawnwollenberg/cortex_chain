@@ -3,11 +3,13 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IntentBook} from "../src/IntentBook.sol";
+import {AttestationRegistry} from "../src/AttestationRegistry.sol";
 import {IIntentBook} from "../src/interfaces/IIntentBook.sol";
-import {Intent, Fill, IntentStatus, IntentType, Constraints, IntentTypehashes} from "../src/libraries/IntentTypes.sol";
+import {Intent, Fill, IntentStatus, IntentType, Constraints, ExecutionRequirements, IntentTypehashes} from "../src/libraries/IntentTypes.sol";
 
 contract IntentBookTest is Test {
     IntentBook public book;
+    AttestationRegistry public attestations;
 
     uint256 internal ownerPk;
     address internal owner;
@@ -20,7 +22,8 @@ contract IntentBookTest is Test {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     function setUp() public {
-        book = new IntentBook();
+        attestations = new AttestationRegistry();
+        book = new IntentBook(address(attestations));
         (owner, ownerPk) = makeAddrAndKey("owner");
     }
 
@@ -32,6 +35,13 @@ contract IntentBookTest is Test {
             intentType: IntentType.SWAP_EXACT_IN_MAX_SLIPPAGE,
             constraints: Constraints({
                 amountInMax: 1000e18, amountOutMin: 900e18, deadline: block.timestamp + 1 hours, slippageBps: 100
+            }),
+            execution: ExecutionRequirements({
+                target: address(0),
+                dataHash: bytes32(0),
+                requiredAttestationSubject: bytes32(0),
+                requiredAttestationSchema: bytes32(0),
+                metadataURIHash: bytes32(0)
             }),
             inputToken: tokenIn,
             outputToken: tokenOut,
@@ -54,6 +64,17 @@ contract IntentBookTest is Test {
         Intent memory intent = _defaultIntent(nonce);
         (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
         return book.submitIntent(intent, v, r, s);
+    }
+
+    function _submitBidAndSelect(uint256 intentId, uint256 amountIn, uint256 amountOut, bytes32 executionHash)
+        internal
+        returns (uint256)
+    {
+        vm.prank(solver);
+        uint256 bidId = book.submitBid(intentId, amountIn, amountOut, 0, block.timestamp + 30 minutes, executionHash);
+        vm.prank(owner);
+        book.selectBid(intentId, bidId);
+        return bidId;
     }
 
     // ── Submit ──────────────────────────────────────────────────────
@@ -160,41 +181,124 @@ contract IntentBookTest is Test {
 
     function test_fillIntent() public {
         uint256 intentId = _submitDefault(1);
+        _submitBidAndSelect(intentId, 950e18, 900e18, bytes32(0));
 
-        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: ""});
+        bytes32 resultHash = keccak256("result");
+        bytes32 traceHash = keccak256("trace");
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: resultHash, traceHash: traceHash, attestationId: 0});
 
         vm.expectEmit(true, true, false, true);
         emit IIntentBook.IntentFilled(intentId, solver, 950e18, 900e18);
+        vm.expectEmit(true, false, true, true);
+        emit IIntentBook.IntentFillProof(intentId, resultHash, traceHash, 0);
+        vm.prank(solver);
         book.fillIntent(intentId, fill);
 
         assertEq(uint8(book.getIntentStatus(intentId)), uint8(IntentStatus.FILLED));
     }
 
+    function test_fillIntent_enforcesRequiredAttestation() public {
+        bytes32 subject = keccak256("solver-capability");
+        bytes32 schema = keccak256("safety-review");
+        Intent memory intent = _defaultIntent(1);
+        intent.execution.requiredAttestationSubject = subject;
+        intent.execution.requiredAttestationSchema = schema;
+        (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
+        uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, 950e18, 900e18, bytes32(0));
+
+        uint256 attestationId = attestations.submitAttestation(schema, subject, keccak256("attestation-data"));
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: attestationId});
+
+        vm.prank(solver);
+        book.fillIntent(intentId, fill);
+
+        assertEq(uint8(book.getIntentStatus(intentId)), uint8(IntentStatus.FILLED));
+    }
+
+    function test_fillIntent_revertMissingRequiredAttestation() public {
+        Intent memory intent = _defaultIntent(1);
+        intent.execution.requiredAttestationSubject = keccak256("solver-capability");
+        intent.execution.requiredAttestationSchema = keccak256("safety-review");
+        (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
+        uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, 950e18, 900e18, bytes32(0));
+
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.RequiredAttestationMissing.selector);
+        book.fillIntent(intentId, fill);
+    }
+
+    function test_fillIntent_revertWrongRequiredAttestation() public {
+        bytes32 subject = keccak256("solver-capability");
+        bytes32 schema = keccak256("safety-review");
+        Intent memory intent = _defaultIntent(1);
+        intent.execution.requiredAttestationSubject = subject;
+        intent.execution.requiredAttestationSchema = schema;
+        (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
+        uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, 950e18, 900e18, bytes32(0));
+
+        uint256 attestationId = attestations.submitAttestation(schema, keccak256("other-subject"), keccak256("attestation-data"));
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: attestationId});
+
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.RequiredAttestationMissing.selector);
+        book.fillIntent(intentId, fill);
+    }
+
+    function test_fillIntent_revertRevokedRequiredAttestation() public {
+        bytes32 subject = keccak256("solver-capability");
+        bytes32 schema = keccak256("safety-review");
+        Intent memory intent = _defaultIntent(1);
+        intent.execution.requiredAttestationSubject = subject;
+        intent.execution.requiredAttestationSchema = schema;
+        (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
+        uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, 950e18, 900e18, bytes32(0));
+
+        uint256 attestationId = attestations.submitAttestation(schema, subject, keccak256("attestation-data"));
+        attestations.revokeAttestation(attestationId);
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: attestationId});
+
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.RequiredAttestationMissing.selector);
+        book.fillIntent(intentId, fill);
+    }
+
     function test_fillIntent_revertAmountInExceeded() public {
         uint256 intentId = _submitDefault(1);
+        _submitBidAndSelect(intentId, 1000e18, 900e18, bytes32(0));
 
-        Fill memory fill = Fill({amountIn: 1001e18, amountOut: 900e18, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: 1001e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
 
+        vm.prank(solver);
         vm.expectRevert(IIntentBook.ConstraintViolation.selector);
         book.fillIntent(intentId, fill);
     }
 
     function test_fillIntent_revertAmountOutTooLow() public {
         uint256 intentId = _submitDefault(1);
+        _submitBidAndSelect(intentId, 1000e18, 900e18, bytes32(0));
 
-        Fill memory fill = Fill({amountIn: 1000e18, amountOut: 899e18, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: 1000e18, amountOut: 899e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
 
+        vm.prank(solver);
         vm.expectRevert(IIntentBook.ConstraintViolation.selector);
         book.fillIntent(intentId, fill);
     }
 
     function test_fillIntent_revertExpired() public {
         uint256 intentId = _submitDefault(1);
+        _submitBidAndSelect(intentId, 950e18, 900e18, bytes32(0));
 
         vm.warp(block.timestamp + 2 hours);
 
-        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
 
+        vm.prank(solver);
         vm.expectRevert(IIntentBook.IntentExpired.selector);
         book.fillIntent(intentId, fill);
 
@@ -205,11 +309,116 @@ contract IntentBookTest is Test {
 
     function test_fillIntent_revertAlreadyFilled() public {
         uint256 intentId = _submitDefault(1);
+        _submitBidAndSelect(intentId, 950e18, 900e18, bytes32(0));
 
-        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
         book.fillIntent(intentId, fill);
 
         vm.expectRevert(IIntentBook.IntentNotOpen.selector);
+        book.fillIntent(intentId, fill);
+    }
+
+    // ── Onchain bids ────────────────────────────────────────────────
+
+    function test_submitBid() public {
+        uint256 intentId = _submitDefault(1);
+
+        vm.prank(solver);
+        vm.expectEmit(true, true, true, true);
+        emit IIntentBook.SolverBidSubmitted(
+            intentId, 1, solver, 950e18, 901e18, 1e15, block.timestamp + 30 minutes, bytes32("plan")
+        );
+        uint256 bidId = book.submitBid(intentId, 950e18, 901e18, 1e15, block.timestamp + 30 minutes, bytes32("plan"));
+
+        assertEq(bidId, 1);
+        assertEq(book.getBid(intentId, bidId).solver, solver);
+    }
+
+    function test_submitBid_revertOutsideConstraints() public {
+        uint256 intentId = _submitDefault(1);
+
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.ConstraintViolation.selector);
+        book.submitBid(intentId, 1001e18, 901e18, 0, block.timestamp + 30 minutes, bytes32(0));
+    }
+
+    function test_selectBid_ownerOnly() public {
+        uint256 intentId = _submitDefault(1);
+
+        vm.prank(solver);
+        uint256 bidId = book.submitBid(intentId, 950e18, 901e18, 0, block.timestamp + 30 minutes, bytes32(0));
+
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.Unauthorized.selector);
+        book.selectBid(intentId, bidId);
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit IIntentBook.SolverBidSelected(intentId, bidId, solver);
+        book.selectBid(intentId, bidId);
+
+        assertEq(book.getSelectedBid(intentId), bidId);
+        assertTrue(book.getBid(intentId, bidId).selected);
+    }
+
+    function test_fillIntent_enforcesSelectedBid() public {
+        uint256 intentId = _submitDefault(1);
+
+        vm.prank(solver);
+        uint256 bidId = book.submitBid(intentId, 950e18, 901e18, 0, block.timestamp + 30 minutes, bytes32(0));
+
+        vm.prank(owner);
+        book.selectBid(intentId, bidId);
+
+        Fill memory wrongFill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.ConstraintViolation.selector);
+        book.fillIntent(intentId, wrongFill);
+
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 901e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
+        book.fillIntent(intentId, fill);
+
+        assertEq(uint8(book.getIntentStatus(intentId)), uint8(IntentStatus.FILLED));
+    }
+
+    function test_fillIntent_revertWithoutSelectedBid() public {
+        uint256 intentId = _submitDefault(1);
+
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.SelectedBidRequired.selector);
+        book.fillIntent(intentId, fill);
+    }
+
+    function test_fillIntent_revertExecutionCommitmentMismatch() public {
+        Intent memory intent = _defaultIntent(1);
+        intent.execution.dataHash = keccak256("expected-execution");
+        (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
+        uint256 intentId = book.submitIntent(intent, v, r, s);
+
+        _submitBidAndSelect(intentId, 950e18, 900e18, keccak256("different-execution"));
+
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
+        vm.expectRevert(IIntentBook.ExecutionCommitmentMismatch.selector);
+        book.fillIntent(intentId, fill);
+    }
+
+    function test_fillIntent_revertIfSelectedSolverMismatch() public {
+        uint256 intentId = _submitDefault(1);
+        address otherSolver = makeAddr("otherSolver");
+
+        vm.prank(solver);
+        uint256 bidId = book.submitBid(intentId, 950e18, 901e18, 0, block.timestamp + 30 minutes, bytes32(0));
+
+        vm.prank(owner);
+        book.selectBid(intentId, bidId);
+
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 901e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(otherSolver);
+        vm.expectRevert(IIntentBook.Unauthorized.selector);
         book.fillIntent(intentId, fill);
     }
 
@@ -219,7 +428,7 @@ contract IntentBookTest is Test {
         vm.prank(owner);
         book.cancelIntent(intentId);
 
-        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
         vm.expectRevert(IIntentBook.IntentNotOpen.selector);
         book.fillIntent(intentId, fill);
     }
@@ -230,7 +439,9 @@ contract IntentBookTest is Test {
         uint256 intentId = _submitDefault(1);
 
         // Exactly at max in and min out — should succeed
-        Fill memory fill = Fill({amountIn: 1000e18, amountOut: 900e18, solver: solver, executionData: ""});
+        _submitBidAndSelect(intentId, 1000e18, 900e18, bytes32(0));
+        Fill memory fill = Fill({amountIn: 1000e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
         book.fillIntent(intentId, fill);
         assertEq(uint8(book.getIntentStatus(intentId)), uint8(IntentStatus.FILLED));
     }

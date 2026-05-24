@@ -54,7 +54,7 @@ source ops/.env.testnet
 ./ops/deploy-testnet.sh
 ```
 
-This deploys AgentRegistry, IntentBook, PolicyModule, and AttestationRegistry to Base Sepolia. Contract addresses are written to `ops/.env.testnet`.
+This deploys AgentRegistry, IntentBook, PolicyModule, AttestationRegistry, SolverRegistry, AttestorRegistry, and CommerceRegistry to Base Sepolia. Contract addresses are written to `ops/.env.testnet`.
 
 Verify on the block explorer:
 
@@ -62,6 +62,12 @@ Verify on the block explorer:
 # Print the AgentRegistry address
 grep AGENT_REGISTRY_ADDRESS ops/.env.testnet
 # Visit: https://sepolia.basescan.org/address/<address>
+```
+
+Confirm the commerce address is present before starting the indexer:
+
+```bash
+grep COMMERCE_REGISTRY_ADDRESS ops/.env.testnet
 ```
 
 ## 4. Set Up Postgres
@@ -87,16 +93,18 @@ You need a Postgres instance accessible from wherever you'll run the services. O
 2. Go to Settings → Database → Connection string (URI)
 3. Update `DATABASE_URL` in `ops/.env.testnet`
 
-## 5. Run Migrations
+## 5. Start Services
 
 ```bash
 source ops/.env.testnet
-psql "$DATABASE_URL" -f indexer/migrations/001_init.sql
+ENV_FILE=ops/.env.testnet ./ops/start-services.sh
 ```
 
-This creates the `agents`, `intents`, `fills`, `policies`, and `tx_receipts` tables.
+This builds services, runs all idempotent migrations, and starts the indexer, solver, and API.
 
-## 6. Start Services
+The service launcher passes `COMMERCE_REGISTRY_ADDRESS` into the indexer so merchant, service, facilitator, quote, receipt, dispute, and fee events are indexed.
+
+## 6. Manual Service Commands
 
 Each service reads from environment variables. Source the testnet env and start them:
 
@@ -107,7 +115,7 @@ source ops/.env.testnet
 ### Indexer
 
 ```bash
-cd indexer && npm run build && node dist/index.js
+cd indexer && npm run build && node dist/src/index.js
 ```
 
 The indexer polls Base Sepolia for contract events and writes them to Postgres.
@@ -115,7 +123,7 @@ The indexer polls Base Sepolia for contract events and writes them to Postgres.
 ### Solver
 
 ```bash
-cd solver && npm run build && node dist/index.js
+cd solver && npm run build && node dist/src/index.js
 ```
 
 The solver watches for `IntentSubmitted` events, simulates fills, and executes them.
@@ -123,7 +131,7 @@ The solver watches for `IntentSubmitted` events, simulates fills, and executes t
 ### API
 
 ```bash
-cd api && npm run build && node dist/index.js
+cd api && npm run build && node dist/src/index.js
 ```
 
 The API serves REST endpoints on port 3001 (configurable via `API_PORT`).
@@ -133,9 +141,9 @@ The API serves REST endpoints on port 3001 (configurable via `API_PORT`).
 ```bash
 source ops/.env.testnet
 
-cd indexer && npm run build && nohup node dist/index.js > ../ops/indexer.log 2>&1 &
-cd ../solver && npm run build && nohup node dist/index.js > ../ops/solver.log 2>&1 &
-cd ../api && npm run build && nohup node dist/index.js > ../ops/api.log 2>&1 &
+cd indexer && npm run build && nohup node dist/src/index.js > ../ops/indexer.log 2>&1 &
+cd ../solver && npm run build && nohup node dist/src/index.js > ../ops/solver.log 2>&1 &
+cd ../api && npm run build && nohup node dist/src/index.js > ../ops/api.log 2>&1 &
 ```
 
 ### Deploying to Railway
@@ -158,6 +166,8 @@ Visit `https://sepolia.basescan.org/address/<AGENT_REGISTRY_ADDRESS>` to confirm
 ```bash
 # Health check
 curl http://localhost:3001/health
+curl http://localhost:3001/attestations/schemas
+curl http://localhost:3001/analytics/commerce
 
 # List agents (should be empty initially)
 curl http://localhost:3001/agents?owner=0x0000000000000000000000000000000000000000
@@ -165,6 +175,38 @@ curl http://localhost:3001/agents?owner=0x00000000000000000000000000000000000000
 # List open intents
 curl http://localhost:3001/intents?status=open
 ```
+
+Or run the packaged smoke test:
+
+```bash
+ENV_FILE=ops/.env.testnet ./ops/testnet-smoke.sh
+```
+
+### Start the dashboard
+
+Run the web dashboard against the Base Sepolia API:
+
+```bash
+cd web
+NEXT_PUBLIC_API_URL=http://localhost:3001 npm run dev
+```
+
+Open `http://localhost:3000/dashboard`. The dashboard reads `/analytics/commerce`, merchant/service discovery endpoints, receipts, and disputes. Protocol fees should show `0` until a future fee switch is intentionally added.
+
+For a hosted dashboard, set `NEXT_PUBLIC_API_URL` to the public API URL before building or deploying the Next app.
+
+### Commerce smoke path
+
+After the contracts and services are live, run the local demo flow against the testnet environment from a funded agent and solver wallet:
+
+```bash
+cp ops/.env.testnet ops/.env.deployed
+cd ops/demo
+npm run build
+node dist/run.js
+```
+
+The demo registers a merchant, service, and facilitator, configures an x402-style payment policy, commits a quote with an x402 payload hash and payment nonce, records a receipt, opens/resolves a dispute, and then verifies the indexed API state. Use this only with funded test wallets because it sends Base Sepolia transactions.
 
 ### Register a test agent
 

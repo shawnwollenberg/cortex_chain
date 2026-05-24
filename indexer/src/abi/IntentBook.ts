@@ -3,7 +3,9 @@ import type { Abi } from "viem";
 export const IntentBookABI = [
   {
     type: "constructor",
-    inputs: [],
+    inputs: [
+      { name: "attestationRegistry_", type: "address", internalType: "address" },
+    ],
     stateMutability: "nonpayable",
   },
   {
@@ -44,6 +46,9 @@ export const IntentBookABI = [
           { name: "amountOut", type: "uint256", internalType: "uint256" },
           { name: "solver", type: "address", internalType: "address" },
           { name: "executionData", type: "bytes", internalType: "bytes" },
+          { name: "resultHash", type: "bytes32", internalType: "bytes32" },
+          { name: "traceHash", type: "bytes32", internalType: "bytes32" },
+          { name: "attestationId", type: "uint256", internalType: "uint256" },
         ],
       },
     ],
@@ -75,6 +80,18 @@ export const IntentBookABI = [
               { name: "slippageBps", type: "uint16", internalType: "uint16" },
             ],
           },
+          {
+            name: "execution",
+            type: "tuple",
+            internalType: "struct ExecutionRequirements",
+            components: [
+              { name: "target", type: "address", internalType: "address" },
+              { name: "dataHash", type: "bytes32", internalType: "bytes32" },
+              { name: "requiredAttestationSubject", type: "bytes32", internalType: "bytes32" },
+              { name: "requiredAttestationSchema", type: "bytes32", internalType: "bytes32" },
+              { name: "metadataURIHash", type: "bytes32", internalType: "bytes32" },
+            ],
+          },
           { name: "inputToken", type: "address", internalType: "address" },
           { name: "outputToken", type: "address", internalType: "address" },
           { name: "nonce", type: "uint256", internalType: "uint256" },
@@ -96,6 +113,37 @@ export const IntentBookABI = [
   },
   {
     type: "function",
+    name: "getSelectedBid",
+    inputs: [{ name: "intentId", type: "uint256", internalType: "uint256" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "selectBid",
+    inputs: [
+      { name: "intentId", type: "uint256", internalType: "uint256" },
+      { name: "bidId", type: "uint256", internalType: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "submitBid",
+    inputs: [
+      { name: "intentId", type: "uint256", internalType: "uint256" },
+      { name: "amountIn", type: "uint256", internalType: "uint256" },
+      { name: "amountOut", type: "uint256", internalType: "uint256" },
+      { name: "fee", type: "uint256", internalType: "uint256" },
+      { name: "validUntil", type: "uint256", internalType: "uint256" },
+      { name: "executionHash", type: "bytes32", internalType: "bytes32" },
+    ],
+    outputs: [{ name: "bidId", type: "uint256", internalType: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "submitIntent",
     inputs: [
       {
@@ -114,6 +162,18 @@ export const IntentBookABI = [
               { name: "amountOutMin", type: "uint256", internalType: "uint256" },
               { name: "deadline", type: "uint256", internalType: "uint256" },
               { name: "slippageBps", type: "uint16", internalType: "uint16" },
+            ],
+          },
+          {
+            name: "execution",
+            type: "tuple",
+            internalType: "struct ExecutionRequirements",
+            components: [
+              { name: "target", type: "address", internalType: "address" },
+              { name: "dataHash", type: "bytes32", internalType: "bytes32" },
+              { name: "requiredAttestationSubject", type: "bytes32", internalType: "bytes32" },
+              { name: "requiredAttestationSchema", type: "bytes32", internalType: "bytes32" },
+              { name: "metadataURIHash", type: "bytes32", internalType: "bytes32" },
             ],
           },
           { name: "inputToken", type: "address", internalType: "address" },
@@ -157,6 +217,17 @@ export const IntentBookABI = [
   },
   {
     type: "event",
+    name: "IntentFillProof",
+    inputs: [
+      { name: "intentId", type: "uint256", indexed: true, internalType: "uint256" },
+      { name: "resultHash", type: "bytes32", indexed: false, internalType: "bytes32" },
+      { name: "traceHash", type: "bytes32", indexed: false, internalType: "bytes32" },
+      { name: "attestationId", type: "uint256", indexed: true, internalType: "uint256" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "IntentSubmitted",
     inputs: [
       { name: "intentId", type: "uint256", indexed: true, internalType: "uint256" },
@@ -165,6 +236,34 @@ export const IntentBookABI = [
     ],
     anonymous: false,
   },
+  {
+    type: "event",
+    name: "SolverBidSelected",
+    inputs: [
+      { name: "intentId", type: "uint256", indexed: true, internalType: "uint256" },
+      { name: "bidId", type: "uint256", indexed: true, internalType: "uint256" },
+      { name: "solver", type: "address", indexed: true, internalType: "address" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SolverBidSubmitted",
+    inputs: [
+      { name: "intentId", type: "uint256", indexed: true, internalType: "uint256" },
+      { name: "bidId", type: "uint256", indexed: true, internalType: "uint256" },
+      { name: "solver", type: "address", indexed: true, internalType: "address" },
+      { name: "amountIn", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "amountOut", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "fee", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "validUntil", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "executionHash", type: "bytes32", indexed: false, internalType: "bytes32" },
+    ],
+    anonymous: false,
+  },
+  { type: "error", name: "BidExpired", inputs: [] },
+  { type: "error", name: "BidNotFound", inputs: [] },
+  { type: "error", name: "BidNotSelected", inputs: [] },
   { type: "error", name: "ConstraintViolation", inputs: [] },
   { type: "error", name: "ECDSAInvalidSignature", inputs: [] },
   {

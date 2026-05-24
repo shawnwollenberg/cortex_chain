@@ -53,22 +53,90 @@ async function seedTestData(pool: pg.Pool): Promise<void> {
     { eventName: "AgentRegistered", args: { agentId: "1", owner: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
     { eventName: "IntentSubmitted", args: { intentId: "1", owner: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
   ])]);
+
+  await pool.query(`
+    INSERT INTO solvers (solver_id, operator, metadata_uri, capabilities_hash, bond, fills, successful_fills, failed_fills, active, block_number)
+    VALUES
+      (1, '0xcccccccccccccccccccccccccccccccccccccccc', 'ipfs://solver1', '0xsolvercap1', 1000, 3, 2, 1, true, 500),
+      (2, '0xdddddddddddddddddddddddddddddddddddddddd', 'ipfs://solver2', '0xsolvercap2', 0, 0, 0, 0, false, 501)
+    ON CONFLICT DO NOTHING
+  `);
+
+  await pool.query(`
+    INSERT INTO attestors (attestor_id, operator, metadata_uri, schemas_hash, attestations, revoked_attestations, active, block_number)
+    VALUES
+      (1, '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'ipfs://attestor1', '0xschema1', 5, 1, true, 600),
+      (2, '0xffffffffffffffffffffffffffffffffffffffff', 'ipfs://attestor2', '0xschema2', 0, 0, false, 601)
+    ON CONFLICT DO NOTHING
+  `);
+
+  await pool.query(`
+    INSERT INTO merchants (merchant_id, owner, payout_address, metadata_uri, metadata_hash, active, block_number)
+    VALUES
+      (1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ipfs://merchant1', $1, true, 700)
+    ON CONFLICT DO NOTHING
+  `, [`0x${"aa".repeat(32)}`]);
+
+  await pool.query(`
+    INSERT INTO services (service_numeric_id, merchant_id, service_id, metadata_uri, metadata_hash, capability_hash, active, block_number)
+    VALUES
+      (1, 1, 'weather.current', 'ipfs://service1', $1, $2, true, 701)
+    ON CONFLICT DO NOTHING
+  `, [`0x${"bb".repeat(32)}`, `0x${"cc".repeat(32)}`]);
+
+  await pool.query(`
+    INSERT INTO facilitators (facilitator_id, facilitator, metadata_uri, metadata_hash, active, block_number)
+    VALUES
+      (1, '0xcccccccccccccccccccccccccccccccccccccccc', 'ipfs://facilitator1', $1, true, 702)
+    ON CONFLICT DO NOTHING
+  `, [`0x${"dd".repeat(32)}`]);
+
+  await pool.query(`
+    INSERT INTO quotes
+      (quote_hash, merchant_id, service_numeric_id, agent, token, facilitator, amount, protocol_fee_bps,
+       protocol_fee_amount, expires_at, payment_nonce, resource_hash, terms_hash, x402_payload_hash, settled,
+       block_number)
+    VALUES
+      ($1, 1, 1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '0x1111111111111111111111111111111111111111',
+       '0xcccccccccccccccccccccccccccccccccccccccc', 1000000, 0, 0, 9999999999, 1, $2, $3, $4, true, 703)
+    ON CONFLICT DO NOTHING
+  `, [`0x${"11".repeat(32)}`, `0x${"22".repeat(32)}`, `0x${"33".repeat(32)}`, `0x${"44".repeat(32)}`]);
+
+  await pool.query(`
+    INSERT INTO commerce_receipts
+      (receipt_id, quote_hash, agent, merchant_id, service_numeric_id, token, amount, protocol_fee_bps,
+       protocol_fee_amount, facilitator, result_hash, resource_hash, block_number)
+    VALUES
+      (1, $1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 1,
+       '0x1111111111111111111111111111111111111111', 1000000, 0, 0,
+       '0xcccccccccccccccccccccccccccccccccccccccc', $2, $3, 704)
+    ON CONFLICT DO NOTHING
+  `, [`0x${"11".repeat(32)}`, `0x${"55".repeat(32)}`, `0x${"22".repeat(32)}`]);
+
+  await pool.query(`
+    INSERT INTO disputes (dispute_id, receipt_id, opener, reason_hash, status, resolution_hash, block_number)
+    VALUES
+      (1, 1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $1, 'RESOLVED', $2, 705)
+    ON CONFLICT DO NOTHING
+  `, [`0x${"66".repeat(32)}`, `0x${"77".repeat(32)}`]);
 }
 
 beforeAll(async () => {
   pool = new pg.Pool({ connectionString: TEST_DATABASE_URL });
 
   // Drop and recreate tables
-  await pool.query("DROP TABLE IF EXISTS fills, policies, tx_receipts, intents, agents, indexer_state CASCADE");
+  await pool.query("DROP TABLE IF EXISTS disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
 
   // Run migrations (read the SQL file)
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const migrationPath = resolve(__dirname, "..", "..", "indexer", "migrations", "001_init.sql");
-  const sql = readFileSync(migrationPath, "utf-8");
-  await pool.query(sql);
+  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql"]) {
+    const migrationPath = resolve(__dirname, "..", "..", "indexer", "migrations", file);
+    const sql = readFileSync(migrationPath, "utf-8");
+    await pool.query(sql);
+  }
 
   await seedTestData(pool);
 
@@ -176,6 +244,42 @@ describe("Intents", () => {
     const res = await fetch(`${baseUrl}/intents/999`);
     expect(res.status).toBe(404);
   });
+
+  it("POST /intents/metadata reserves metadata by intent hash", async () => {
+    const intentHash = `0x${"12".repeat(32)}`;
+    const res = await fetch(`${baseUrl}/intents/metadata`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        intent_hash: intentHash,
+        owner: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        execution_target: "0x3333333333333333333333333333333333333333",
+        execution_data: "0x1234",
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.intent_hash).toBe(intentHash);
+    expect(body.execution_target).toBe("0x3333333333333333333333333333333333333333");
+  });
+
+  it("PUT /intents/1/metadata attaches metadata to an indexed intent", async () => {
+    const res = await fetch(`${baseUrl}/intents/1/metadata`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        execution_target: "0x3333333333333333333333333333333333333333",
+        execution_data: "0x1234",
+        required_attestation_subject: `0x${"34".repeat(32)}`,
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const intentRes = await fetch(`${baseUrl}/intents/1`);
+    const body = await intentRes.json();
+    expect(body.metadata.execution_data).toBe("0x1234");
+    expect(body.metadata.required_attestation_subject).toBe(`0x${"34".repeat(32)}`);
+  });
 });
 
 describe("Policies", () => {
@@ -191,6 +295,140 @@ describe("Policies", () => {
   it("GET /accounts/invalid/policies returns 400", async () => {
     const res = await fetch(`${baseUrl}/accounts/invalid/policies`);
     expect(res.status).toBe(400);
+  });
+});
+
+describe("Preflight", () => {
+  it("POST /preflight allows an allowlisted target", async () => {
+    const res = await fetch(`${baseUrl}/preflight`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        account: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        target: "0x3333333333333333333333333333333333333333",
+        value: "0",
+        data: "0x",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.allowed).toBe(true);
+    expect(body.action).toContain("empty call");
+  });
+
+  it("POST /preflight denies a missing target allowlist", async () => {
+    const res = await fetch(`${baseUrl}/preflight`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        account: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        target: "0x4444444444444444444444444444444444444444",
+        value: "0",
+        data: "0x",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.allowed).toBe(false);
+    expect(body.missing_policies).toContain("target_allowlist");
+    expect(body.required_policy_updates[0].policy_type).toBe("target_allowlist");
+  });
+});
+
+describe("Bids", () => {
+  it("POST /intents/1/bids creates a solver bid", async () => {
+    const res = await fetch(`${baseUrl}/intents/1/bids`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        solver: "0xcccccccccccccccccccccccccccccccccccccccc",
+        amount_in: "1000",
+        amount_out: "950",
+        fee: "5",
+        valid_until: "9999999999",
+        execution_plan: { route: "demo" },
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.intent_id).toBe("1");
+    expect(body.status).toBe("OPEN");
+  });
+
+  it("GET /intents/1/bids lists bids in best-first order", async () => {
+    const res = await fetch(`${baseUrl}/intents/1/bids`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.bids.length).toBeGreaterThanOrEqual(1);
+    expect(body.bids[0].amount_out).toBe("950");
+  });
+
+  it("POST /bids/1/select selects a bid", async () => {
+    const res = await fetch(`${baseUrl}/bids/1/select`, { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("SELECTED");
+  });
+});
+
+describe("Attestation Schemas", () => {
+  it("GET /attestations/schemas returns built-in schemas", async () => {
+    const res = await fetch(`${baseUrl}/attestations/schemas`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.schemas.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("Participants", () => {
+  it("GET /solvers returns registered solvers", async () => {
+    const res = await fetch(`${baseUrl}/solvers?active=true`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.solvers).toHaveLength(1);
+    expect(body.solvers[0].operator).toBe("0xcccccccccccccccccccccccccccccccccccccccc");
+    expect(body.solvers[0].successful_fills).toBe("2");
+  });
+
+  it("GET /solvers/1 returns solver data", async () => {
+    const res = await fetch(`${baseUrl}/solvers/1`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.solver_id).toBe("1");
+    expect(body.bond).toBe("1000");
+  });
+
+  it("GET /attestors returns registered attestors", async () => {
+    const res = await fetch(`${baseUrl}/attestors?active=true`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.attestors).toHaveLength(1);
+    expect(body.attestors[0].operator).toBe("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    expect(body.attestors[0].attestations).toBe("5");
+  });
+
+  it("GET /attestors/1 returns attestor data", async () => {
+    const res = await fetch(`${baseUrl}/attestors/1`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.attestor_id).toBe("1");
+    expect(body.revoked_attestations).toBe("1");
+  });
+});
+
+describe("Analytics", () => {
+  it("GET /analytics/commerce returns commerce volume and fee metrics", async () => {
+    const res = await fetch(`${baseUrl}/analytics/commerce`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summary.merchants).toBe("1");
+    expect(body.summary.receipts).toBe("1");
+    expect(body.summary.settled_volume).toBe("1000000");
+    expect(body.summary.settled_protocol_fees).toBe("0");
+    expect(body.summary.resolved_disputes).toBe("1");
+    expect(body.volume_by_token[0].token).toBe("0x1111111111111111111111111111111111111111");
+    expect(body.top_merchants[0].merchant_id).toBe("1");
+    expect(body.facilitator_volume[0].facilitator).toBe("0xcccccccccccccccccccccccccccccccccccccccc");
   });
 });
 

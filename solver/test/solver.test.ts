@@ -15,7 +15,8 @@ import { IntentListener } from "../src/listener.js";
 import { IntentExecutor } from "../src/executor.js";
 import { IntentStatus, IntentType } from "../src/types.js";
 
-const RPC_URL = "http://127.0.0.1:8545";
+const ANVIL_PORT = "18545";
+const RPC_URL = `http://127.0.0.1:${ANVIL_PORT}`;
 // Anvil default accounts
 const DEPLOYER_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as Hex;
@@ -101,6 +102,13 @@ async function submitTestIntent(
       deadline,
       slippageBps: 100,
     },
+    execution: {
+      target: "0x0000000000000000000000000000000000000000" as Address,
+      dataHash: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+      requiredAttestationSubject: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+      requiredAttestationSchema: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+      metadataURIHash: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+    },
     inputToken: "0x0000000000000000000000000000000000000001" as Address,
     outputToken: "0x0000000000000000000000000000000000000002" as Address,
     nonce,
@@ -126,6 +134,7 @@ async function submitTestIntent(
         { name: "owner", type: "address" },
         { name: "intentType", type: "uint8" },
         { name: "constraints", type: "Constraints" },
+        { name: "execution", type: "ExecutionRequirements" },
         { name: "inputToken", type: "address" },
         { name: "outputToken", type: "address" },
         { name: "nonce", type: "uint256" },
@@ -135,6 +144,13 @@ async function submitTestIntent(
         { name: "amountOutMin", type: "uint256" },
         { name: "deadline", type: "uint256" },
         { name: "slippageBps", type: "uint16" },
+      ],
+      ExecutionRequirements: [
+        { name: "target", type: "address" },
+        { name: "dataHash", type: "bytes32" },
+        { name: "requiredAttestationSubject", type: "bytes32" },
+        { name: "requiredAttestationSchema", type: "bytes32" },
+        { name: "metadataURIHash", type: "bytes32" },
       ],
     },
     primaryType: "Intent",
@@ -147,6 +163,7 @@ async function submitTestIntent(
         deadline: intent.constraints.deadline,
         slippageBps: intent.constraints.slippageBps,
       },
+      execution: intent.execution,
       inputToken: intent.inputToken,
       outputToken: intent.outputToken,
       nonce: intent.nonce,
@@ -191,10 +208,28 @@ async function submitTestIntent(
   throw new Error("IntentSubmitted event not found in receipt");
 }
 
+async function submitAndSelectBid(intentId: bigint, deadline: bigint): Promise<void> {
+  const bidHash = await solverWallet.writeContract({
+    address: intentBookAddress,
+    abi: IntentBookABI,
+    functionName: "submitBid",
+    args: [intentId, 1000n, 900n, 0n, deadline, "0x0000000000000000000000000000000000000000000000000000000000000000"],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: bidHash });
+
+  const selectHash = await agentWallet.writeContract({
+    address: intentBookAddress,
+    abi: IntentBookABI,
+    functionName: "selectBid",
+    args: [intentId, 1n],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: selectHash });
+}
+
 describe("Solver integration", () => {
   beforeAll(async () => {
     // Start Anvil
-    anvil = spawn("anvil", ["--port", "8545"], {
+    anvil = spawn("anvil", ["--port", ANVIL_PORT], {
       stdio: "pipe",
     });
     anvil.stderr?.on("data", (data: Buffer) => {
@@ -224,6 +259,7 @@ describe("Solver integration", () => {
     // Submit intent (creates a new block via auto-mine)
     const intentId = await submitTestIntent(deadline, 1n);
     expect(intentId).toBeGreaterThan(0n);
+    await submitAndSelectBid(intentId, deadline);
 
     // Verify it's OPEN
     const statusBefore = await publicClient.readContract({
@@ -274,6 +310,7 @@ describe("Solver integration", () => {
 
     // Submit and fill an intent
     const intentId = await submitTestIntent(deadline, 2n);
+    await submitAndSelectBid(intentId, deadline);
     const executor = new IntentExecutor(
       publicClient,
       solverWallet,
@@ -295,6 +332,7 @@ describe("Solver integration", () => {
     const deadline = block.timestamp + 60n;
 
     const intentId = await submitTestIntent(deadline, 3n);
+    await submitAndSelectBid(intentId, deadline);
 
     // Advance time well past the deadline
     await publicClient.request({

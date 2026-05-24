@@ -8,6 +8,9 @@ export interface IndexerConfig {
   intentBookAddress: Address;
   policyModuleAddress: Address;
   attestationRegistryAddress: Address | null;
+  solverRegistryAddress: Address | null;
+  attestorRegistryAddress: Address | null;
+  commerceRegistryAddress: Address | null;
   pollIntervalMs: number;
   startBlock: bigint;
   logLevel: "debug" | "info" | "warn" | "error";
@@ -54,6 +57,33 @@ export function loadConfig(): IndexerConfig {
     attestationRegistryAddress = attestationRegistryEnv as Address;
   }
 
+  let solverRegistryAddress: Address | null = null;
+  const solverRegistryEnv = process.env.SOLVER_REGISTRY_ADDRESS;
+  if (solverRegistryEnv) {
+    if (!isAddress(solverRegistryEnv)) {
+      throw new Error("SOLVER_REGISTRY_ADDRESS is not a valid address");
+    }
+    solverRegistryAddress = solverRegistryEnv as Address;
+  }
+
+  let attestorRegistryAddress: Address | null = null;
+  const attestorRegistryEnv = process.env.ATTESTOR_REGISTRY_ADDRESS;
+  if (attestorRegistryEnv) {
+    if (!isAddress(attestorRegistryEnv)) {
+      throw new Error("ATTESTOR_REGISTRY_ADDRESS is not a valid address");
+    }
+    attestorRegistryAddress = attestorRegistryEnv as Address;
+  }
+
+  let commerceRegistryAddress: Address | null = null;
+  const commerceRegistryEnv = process.env.COMMERCE_REGISTRY_ADDRESS;
+  if (commerceRegistryEnv) {
+    if (!isAddress(commerceRegistryEnv)) {
+      throw new Error("COMMERCE_REGISTRY_ADDRESS is not a valid address");
+    }
+    commerceRegistryAddress = commerceRegistryEnv as Address;
+  }
+
   const pollIntervalMs = parseInt(process.env.POLL_INTERVAL_MS ?? "2000", 10);
   if (isNaN(pollIntervalMs) || pollIntervalMs < 100) {
     throw new Error("POLL_INTERVAL_MS must be a number >= 100");
@@ -73,6 +103,9 @@ export function loadConfig(): IndexerConfig {
     intentBookAddress: intentBookAddress as Address,
     policyModuleAddress: policyModuleAddress as Address,
     attestationRegistryAddress,
+    solverRegistryAddress,
+    attestorRegistryAddress,
+    commerceRegistryAddress,
     pollIntervalMs,
     startBlock,
     logLevel,

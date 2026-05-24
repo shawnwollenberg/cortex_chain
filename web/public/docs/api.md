@@ -117,6 +117,52 @@ Errors: `400` (invalid status)
 
 ---
 
+#### Set Intent Metadata
+
+```
+PUT /intents/:id/metadata
+```
+
+Stores offchain execution/provenance metadata for an indexed intent.
+
+Request:
+```json
+{
+  "execution_target": "0x...",
+  "execution_data": "0x...",
+  "required_attestation_subject": "0x...",
+  "required_attestation_schema": "0x..."
+}
+```
+
+All fields are optional. The solver uses this metadata when `API_URL` is configured.
+
+---
+
+#### Reserve Intent Metadata
+
+```
+POST /intents/metadata
+```
+
+Stores execution metadata before the onchain submit is indexed. The SDK computes `intent_hash`, reserves metadata, submits the signed intent, and the indexer links the reserved metadata to the final `intent_id`.
+
+Request:
+```json
+{
+  "intent_hash": "0x...",
+  "owner": "0x...",
+  "execution_target": "0x...",
+  "execution_data": "0x...",
+  "required_attestation_subject": "0x...",
+  "required_attestation_schema": "0x..."
+}
+```
+
+Response `201`: pending metadata row.
+
+---
+
 ### Policies
 
 #### Get Account Policies
@@ -148,6 +194,262 @@ Response `200`:
 ```
 
 Errors: `400` (invalid address)
+
+---
+
+### Policy Preflight
+
+```
+POST /preflight
+```
+
+Checks indexed account policies before an agent signs or submits a transaction.
+
+Request:
+```json
+{
+  "account": "0x...",
+  "target": "0x...",
+  "value": "0",
+  "data": "0x"
+}
+```
+
+Response:
+```json
+{
+  "allowed": true,
+  "action": "ERC20 transfer from 0x...",
+  "reasons": [],
+  "missing_policies": [],
+  "spend_checks": [],
+  "required_policy_updates": []
+}
+```
+
+---
+
+### Solver Bids
+
+Bid commitment and selection are onchain through `IntentBook.submitBid` and `IntentBook.selectBid`. The API mirrors indexed bid events so agents can inspect the market without scanning logs themselves.
+
+#### Create Bid
+
+```
+POST /intents/:id/bids
+```
+
+Legacy/development helper for inserting an offchain bid row. Production solver bids should use the onchain `IntentBook.submitBid` function.
+
+Request:
+```json
+{
+  "solver": "0x...",
+  "amount_in": "1000",
+  "amount_out": "950",
+  "fee": "5",
+  "valid_until": "1779633720",
+  "execution_plan": { "route": "demo" }
+}
+```
+
+#### List Bids
+
+```
+GET /intents/:id/bids?status=open
+```
+
+Bids are ordered best-first by output amount, input amount, fee, then creation order.
+
+#### Select Bid
+
+```
+POST /bids/:bidId/select
+```
+
+Legacy/development helper for selecting an offchain bid row. Production selection should use the onchain `IntentBook.selectBid(intentId, chainBidId)` function. When a bid is selected onchain, `IntentBook.fillIntent` enforces the selected solver and exact bid amounts.
+
+---
+
+### Attestation Schemas
+
+```
+GET /attestations/schemas
+GET /attestations/schemas/:schemaHash
+POST /attestations/schemas
+```
+
+Built-in schemas include `solver_reputation`, `tool_capability`, `model_provider`, and `safety_review`.
+
+---
+
+### Solvers
+
+#### Get Solver
+
+```
+GET /solvers/:id
+```
+
+Returns solver operator, metadata, capabilities hash, bond, active status, fill counters, average latency blocks, and average output surplus.
+
+#### List Solvers
+
+```
+GET /solvers?active=true&operator=0x...&limit=50&offset=0
+```
+
+Both filters are optional.
+
+---
+
+### Attestors
+
+#### Get Attestor
+
+```
+GET /attestors/:id
+```
+
+Returns attestor operator, metadata, schema hash, active status, and indexed attestation counters.
+
+#### List Attestors
+
+```
+GET /attestors?active=true&operator=0x...&limit=50&offset=0
+```
+
+Both filters are optional.
+
+---
+
+### Commerce
+
+#### List Merchants
+
+```
+GET /merchants?owner=0x...&active=true&limit=50&offset=0
+```
+
+Filters are optional. Returns registered merchant owners, payout addresses, metadata URIs/hashes, active status, and block metadata.
+
+#### Get Merchant
+
+```
+GET /merchants/:id
+```
+
+Errors: `400` (invalid ID), `404` (not found)
+
+#### List Services
+
+```
+GET /services?merchant_id=1&capability_hash=0x...&active=true&limit=50&offset=0
+```
+
+Filters are optional. Services include merchant ID, service ID, metadata URI/hash, capability hash, and active status.
+
+#### Get Service
+
+```
+GET /services/:id
+```
+
+Errors: `400` (invalid ID), `404` (not found)
+
+#### List Facilitators
+
+```
+GET /facilitators?active=true&limit=50&offset=0
+```
+
+Returns facilitator address, metadata URI/hash, active status, and block metadata.
+
+#### Get Quote
+
+```
+GET /quotes/:quoteHash
+```
+
+Response `200`:
+```json
+{
+  "quote_hash": "0x...",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "agent": "0x...",
+  "token": "0x...",
+  "facilitator": "0x...",
+  "amount": "1000000000000000000",
+  "protocol_fee_bps": 0,
+  "protocol_fee_amount": "0",
+  "expires_at": "1779652362",
+  "payment_nonce": "1",
+  "resource_hash": "0x...",
+  "terms_hash": "0x...",
+  "x402_payload_hash": "0x...",
+  "settled": true
+}
+```
+
+The `x402_payload_hash` is used when the payment rail is x402. For basic transfers or swaps, quote terms can bind the payment data through the resource/terms hashes and normal policy checks.
+
+#### List Receipts
+
+```
+GET /receipts?agent=0x...&merchant_id=1&limit=50&offset=0
+```
+
+Returns settled commerce receipts with amount, token, facilitator, result hash, resource hash, and zero-fee protocol instrumentation.
+
+#### List Disputes
+
+```
+GET /disputes?receipt_id=1&limit=50&offset=0
+```
+
+Returns receipt-linked dispute status, opener, reason hash, resolution hash, and block metadata.
+
+---
+
+### Commerce Analytics
+
+```
+GET /analytics/commerce
+```
+
+Returns dashboard-ready protocol metrics.
+
+Response `200`:
+```json
+{
+  "summary": {
+    "merchants": "1",
+    "active_merchants": "1",
+    "services": "1",
+    "active_services": "1",
+    "facilitators": "1",
+    "active_facilitators": "1",
+    "quotes": "1",
+    "settled_quotes": "1",
+    "quoted_volume": "1000000000000000000",
+    "quoted_protocol_fees": "0",
+    "receipts": "1",
+    "settled_volume": "1000000000000000000",
+    "settled_protocol_fees": "0",
+    "disputes": "1",
+    "open_disputes": "0",
+    "resolved_disputes": "1",
+    "rejected_disputes": "0"
+  },
+  "volume_by_token": [],
+  "top_merchants": [],
+  "top_services": [],
+  "facilitator_volume": []
+}
+```
+
+Protocol fee fields are currently instrumented but set to zero by `CommerceRegistry.PROTOCOL_FEE_BPS`.
 
 ---
 

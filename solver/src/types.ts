@@ -22,6 +22,13 @@ export interface Intent {
   owner: Address;
   intentType: IntentType;
   constraints: Constraints;
+  execution: {
+    target: Address;
+    dataHash: Hex;
+    requiredAttestationSubject: Hex;
+    requiredAttestationSchema: Hex;
+    metadataURIHash: Hex;
+  };
   inputToken: Address;
   outputToken: Address;
   nonce: bigint;
@@ -32,6 +39,9 @@ export interface Fill {
   amountOut: bigint;
   solver: Address;
   executionData: Hex;
+  resultHash: Hex;
+  traceHash: Hex;
+  attestationId: bigint;
 }
 
 export interface IntentSubmittedEvent {

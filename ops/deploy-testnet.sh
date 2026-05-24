@@ -23,6 +23,8 @@ ENV_FILE="$SCRIPT_DIR/.env.testnet"
 
 RPC_URL="${RPC_URL:-https://sepolia.base.org}"
 DATABASE_URL="${DATABASE_URL:-}"
+API_URL="${API_URL:-http://localhost:3001}"
+API_PORT="${API_PORT:-3001}"
 SOLVER_PRIVATE_KEY="${SOLVER_PRIVATE_KEY:-}"
 AGENT_PRIVATE_KEY="${AGENT_PRIVATE_KEY:-}"
 
@@ -85,11 +87,14 @@ if [ ! -f "$BROADCAST_FILE" ]; then
 fi
 
 # Extract contract addresses in deployment order
-# Deploy.s.sol creates: AgentRegistry, IntentBook, PolicyModule, AttestationRegistry
+# Deploy.s.sol creates: AgentRegistry, PolicyModule, AttestationRegistry, IntentBook, SolverRegistry, AttestorRegistry, CommerceRegistry
 AGENT_REGISTRY=$(jq -r '.transactions[0].contractAddress' "$BROADCAST_FILE")
-INTENT_BOOK=$(jq -r '.transactions[1].contractAddress' "$BROADCAST_FILE")
-POLICY_MODULE=$(jq -r '.transactions[2].contractAddress' "$BROADCAST_FILE")
-ATTESTATION_REGISTRY=$(jq -r '.transactions[3].contractAddress' "$BROADCAST_FILE")
+POLICY_MODULE=$(jq -r '.transactions[1].contractAddress' "$BROADCAST_FILE")
+ATTESTATION_REGISTRY=$(jq -r '.transactions[2].contractAddress' "$BROADCAST_FILE")
+INTENT_BOOK=$(jq -r '.transactions[3].contractAddress' "$BROADCAST_FILE")
+SOLVER_REGISTRY=$(jq -r '.transactions[4].contractAddress' "$BROADCAST_FILE")
+ATTESTOR_REGISTRY=$(jq -r '.transactions[5].contractAddress' "$BROADCAST_FILE")
+COMMERCE_REGISTRY=$(jq -r '.transactions[6].contractAddress' "$BROADCAST_FILE")
 
 echo ""
 echo "==> Deployed contracts:"
@@ -97,6 +102,9 @@ echo "    AgentRegistry:        $AGENT_REGISTRY"
 echo "    IntentBook:           $INTENT_BOOK"
 echo "    PolicyModule:         $POLICY_MODULE"
 echo "    AttestationRegistry:  $ATTESTATION_REGISTRY"
+echo "    SolverRegistry:       $SOLVER_REGISTRY"
+echo "    AttestorRegistry:     $ATTESTOR_REGISTRY"
+echo "    CommerceRegistry:     $COMMERCE_REGISTRY"
 
 # Write .env.testnet — references env vars for secrets, stores addresses directly
 cat > "$ENV_FILE" <<EOF
@@ -106,12 +114,17 @@ cat > "$ENV_FILE" <<EOF
 RPC_URL=$RPC_URL
 CHAIN_ID=$CHAIN_ID
 DATABASE_URL=$DATABASE_URL
+API_URL=$API_URL
+API_PORT=$API_PORT
 
 # Contract addresses
 AGENT_REGISTRY_ADDRESS=$AGENT_REGISTRY
 INTENT_BOOK_ADDRESS=$INTENT_BOOK
 POLICY_MODULE_ADDRESS=$POLICY_MODULE
 ATTESTATION_REGISTRY_ADDRESS=$ATTESTATION_REGISTRY
+SOLVER_REGISTRY_ADDRESS=$SOLVER_REGISTRY
+ATTESTOR_REGISTRY_ADDRESS=$ATTESTOR_REGISTRY
+COMMERCE_REGISTRY_ADDRESS=$COMMERCE_REGISTRY
 
 # Deployer
 DEPLOYER_ADDRESS=$DEPLOYER_ADDRESS
@@ -128,6 +141,6 @@ echo "==> Addresses written to $ENV_FILE"
 echo ""
 echo "Next steps:"
 echo "  1. Set DATABASE_URL, SOLVER_PRIVATE_KEY, AGENT_PRIVATE_KEY in $ENV_FILE"
-echo "  2. Run indexer migrations: psql \$DATABASE_URL -f indexer/migrations/001_init.sql"
-echo "  3. Start services with: source $ENV_FILE && cd indexer && node dist/index.js"
+echo "  2. Start services: ENV_FILE=$ENV_FILE ./ops/start-services.sh"
+echo "  3. Run smoke checks: ENV_FILE=$ENV_FILE ./ops/testnet-smoke.sh"
 echo "  4. Verify at https://sepolia.basescan.org/address/$AGENT_REGISTRY"

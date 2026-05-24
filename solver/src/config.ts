@@ -5,6 +5,7 @@ export interface SolverConfig {
   rpcUrl: string;
   solverPrivateKey: Hex;
   intentBookAddress: Address;
+  apiUrl: string | null;
   pollIntervalMs: number;
   startBlock: bigint | "latest";
   logLevel: "debug" | "info" | "warn" | "error";
@@ -47,6 +48,7 @@ export function loadConfig(): SolverConfig {
     rpcUrl,
     solverPrivateKey: solverPrivateKey as Hex,
     intentBookAddress: intentBookAddress as Address,
+    apiUrl: process.env.API_URL ?? null,
     pollIntervalMs,
     startBlock,
     logLevel,

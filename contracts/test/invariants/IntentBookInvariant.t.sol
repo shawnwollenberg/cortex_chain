@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IntentBook} from "../../src/IntentBook.sol";
+import {AttestationRegistry} from "../../src/AttestationRegistry.sol";
 import {IIntentBook} from "../../src/interfaces/IIntentBook.sol";
 import {
     Intent,
@@ -10,6 +11,7 @@ import {
     IntentStatus,
     IntentType,
     Constraints,
+    ExecutionRequirements,
     IntentTypehashes
 } from "../../src/libraries/IntentTypes.sol";
 
@@ -34,6 +36,16 @@ contract IntentBookHandler is Test {
         return usedNonceList.length;
     }
 
+    function _defaultExecution() internal pure returns (ExecutionRequirements memory) {
+        return ExecutionRequirements({
+            target: address(0),
+            dataHash: bytes32(0),
+            requiredAttestationSubject: bytes32(0),
+            requiredAttestationSchema: bytes32(0),
+            metadataURIHash: bytes32(0)
+        });
+    }
+
     bytes32 private constant DOMAIN_TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
@@ -52,6 +64,7 @@ contract IntentBookHandler is Test {
             constraints: Constraints({
                 amountInMax: 1000e18, amountOutMin: 500e18, deadline: block.timestamp + 1 days, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: address(1),
             outputToken: address(2),
             nonce: nonce
@@ -80,7 +93,11 @@ contract IntentBookHandler is Test {
         uint256 intentId = bound(intentIdSeed, 1, submittedCount == 0 ? 1 : submittedCount);
         if (book.getIntentStatus(intentId) != IntentStatus.OPEN) return;
 
-        Fill memory fill = Fill({amountIn: 800e18, amountOut: 600e18, solver: address(this), executionData: ""});
+        Fill memory fill = Fill({amountIn: 800e18, amountOut: 600e18, solver: address(this), executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+
+        uint256 bidId = book.submitBid(intentId, fill.amountIn, fill.amountOut, 0, block.timestamp + 1 hours, bytes32(0));
+        vm.prank(owner);
+        book.selectBid(intentId, bidId);
 
         book.fillIntent(intentId, fill);
         wasFilled[intentId] = true;
@@ -99,10 +116,22 @@ contract IntentBookHandler is Test {
 
 contract IntentBookInvariantTest is Test {
     IntentBook public book;
+    AttestationRegistry public attestations;
     IntentBookHandler public handler;
 
+    function _defaultExecution() internal pure returns (ExecutionRequirements memory) {
+        return ExecutionRequirements({
+            target: address(0),
+            dataHash: bytes32(0),
+            requiredAttestationSubject: bytes32(0),
+            requiredAttestationSchema: bytes32(0),
+            metadataURIHash: bytes32(0)
+        });
+    }
+
     function setUp() public {
-        book = new IntentBook();
+        attestations = new AttestationRegistry();
+        book = new IntentBook(address(attestations));
         handler = new IntentBookHandler(book);
 
         targetContract(address(handler));
@@ -142,6 +171,7 @@ contract IntentBookInvariantTest is Test {
             constraints: Constraints({
                 amountInMax: 1000e18, amountOutMin: 500e18, deadline: block.timestamp + 1 days, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: address(1),
             outputToken: address(2),
             nonce: usedNonce

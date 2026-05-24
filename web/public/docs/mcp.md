@@ -99,6 +99,18 @@ Look up an attestation by its numeric ID. Returns attester, schema, subject, dat
 // Response: attester, schema, subject, data hash, and revocation status
 ```
 
+### list_solvers
+
+List registered solvers. Returns operator, metadata, capability hash, bond, active status, and fill counters.
+
+**Parameters:** `active` (boolean, optional), `limit` (number, optional)
+
+### list_attestors
+
+List registered attestors. Returns operator, metadata, schema hash, active status, and indexed attestation counters.
+
+**Parameters:** `active` (boolean, optional), `limit` (number, optional)
+
 ## Usage
 
 The MCP server runs as a stdio transport. Connect it to any MCP-compatible client (Claude Desktop, Claude Code, etc.) by adding it to your MCP configuration:
@@ -108,7 +120,7 @@ The MCP server runs as a stdio transport. Connect it to any MCP-compatible clien
   "mcpServers": {
     "cortex": {
       "command": "node",
-      "args": ["mcp/dist/index.js"],
+      "args": ["mcp/dist/src/index.js"],
       "env": {
         "DATABASE_URL": "postgres://user:pass@localhost:5433/cortex"
       }

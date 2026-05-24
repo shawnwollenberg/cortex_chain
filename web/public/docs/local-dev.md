@@ -26,15 +26,24 @@ make install
 
 ### 2. Start Infrastructure
 
-Starts Anvil (local EVM on port 8545) and Postgres (port 5433) via Docker Compose.
+Starts Anvil (local EVM on port 8545) and Postgres (port 5433 by default) via Docker Compose.
 
 ```bash
 make up
 ```
 
+If port 5433 is in use, choose another host port and pass the matching database URL through the rest of the flow:
+
+```bash
+POSTGRES_PORT=55433 DATABASE_URL=postgresql://ai_chain:ai_chain@localhost:55433/ai_chain make up
+DATABASE_URL=postgresql://ai_chain:ai_chain@localhost:55433/ai_chain make deploy
+DATABASE_URL=postgresql://ai_chain:ai_chain@localhost:55433/ai_chain API_PORT=3012 make services
+API_PORT=3012 make demo
+```
+
 ### 3. Deploy Contracts
 
-Deploys AgentRegistry, IntentBook, and PolicyModule to the local Anvil chain. Writes contract addresses and well-known Anvil keys to `ops/.env.deployed`.
+Deploys AgentRegistry, IntentBook, PolicyModule, AttestationRegistry, SolverRegistry, AttestorRegistry, and CommerceRegistry to the local Anvil chain. Writes contract addresses and well-known Anvil keys to `ops/.env.deployed`.
 
 ```bash
 make deploy
@@ -51,7 +60,7 @@ make services
 Services:
 - **Indexer** — polls Anvil for contract events, writes to Postgres
 - **Solver** — watches for open intents, simulates and fills them
-- **API** — REST server on `http://localhost:3000`
+- **API** — REST server on `http://localhost:3001`
 
 Logs are written to `ops/indexer.log`, `ops/solver.log`, `ops/api.log`.
 
@@ -65,10 +74,12 @@ make demo
 
 The demo:
 1. Registers an agent identity
-2. Sets spend limit and target allowlist policies
-3. Submits an EIP-712 signed swap intent
-4. Waits for the solver to fill the intent
-5. Queries all API endpoints and prints results
+2. Registers solver, attestor, merchant, service, and facilitator records
+3. Sets spend limit, target allowlist, and signed payment policies
+4. Submits an EIP-712 signed swap intent
+5. Waits for the solver to fill the intent
+6. Commits a commerce quote, records a receipt, and resolves a dispute
+7. Queries API endpoints, including commerce analytics, and prints results
 
 ### 6. Tear Down
 
@@ -96,7 +107,8 @@ make clean   # also remove volumes and generated files
 |---------|------|
 | Anvil (RPC) | 8545 |
 | Postgres | 5433 |
-| REST API | 3000 |
+| REST API | 3001 |
+| Web dashboard | 3000 |
 
 ## Environment
 

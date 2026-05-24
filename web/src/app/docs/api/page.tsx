@@ -114,6 +114,59 @@ export default function ApiPage() {
 
       <hr className="border-border my-8" />
 
+      {/* Commerce */}
+      <h2 className="text-xl font-semibold mb-4">Commerce</h2>
+      <div className="grid gap-3 text-sm text-muted mb-6">
+        <p><code>GET /merchants?owner=0x...&amp;active=true</code> — list registered merchants.</p>
+        <p><code>GET /merchants/:id</code> — get one merchant.</p>
+        <p><code>GET /services?merchant_id=1&amp;capability_hash=0x...&amp;active=true</code> — list services.</p>
+        <p><code>GET /services/:id</code> — get one service.</p>
+        <p><code>GET /facilitators?active=true</code> — list payment facilitators.</p>
+        <p><code>GET /quotes/:quoteHash</code> — get a canonical quote commitment.</p>
+        <p><code>GET /receipts?agent=0x...&amp;merchant_id=1</code> — list settled receipts.</p>
+        <p><code>GET /disputes?receipt_id=1</code> — list receipt-linked disputes.</p>
+      </div>
+      <CodeBlock language="json">{`{
+  "quote_hash": "0x...",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "agent": "0x...",
+  "token": "0x...",
+  "facilitator": "0x...",
+  "amount": "1000000000000000000",
+  "protocol_fee_bps": 0,
+  "protocol_fee_amount": "0",
+  "payment_nonce": "1",
+  "resource_hash": "0x...",
+  "terms_hash": "0x...",
+  "x402_payload_hash": "0x...",
+  "settled": true
+}`}</CodeBlock>
+      <p className="text-sm text-muted mt-3 mb-6">
+        Cortex supports basic wallet transfers, swaps, facilitator-mediated payments, and x402.
+        The x402 payload hash is used only when the selected payment rail is x402.
+      </p>
+
+      <h2 className="text-xl font-semibold mb-4">Commerce Analytics</h2>
+      <p className="text-sm text-muted mb-2"><code>GET /analytics/commerce</code></p>
+      <CodeBlock language="json">{`{
+  "summary": {
+    "merchants": "1",
+    "services": "1",
+    "quotes": "1",
+    "receipts": "1",
+    "settled_volume": "1000000000000000000",
+    "settled_protocol_fees": "0",
+    "open_disputes": "0"
+  },
+  "volume_by_token": [],
+  "top_merchants": [],
+  "top_services": [],
+  "facilitator_volume": []
+}`}</CodeBlock>
+
+      <hr className="border-border my-8" />
+
       {/* Tx Explain */}
       <h2 className="text-xl font-semibold mb-4">Transaction Explain</h2>
 

@@ -5,6 +5,9 @@ import { AgentRegistryABI } from "./abi/AgentRegistry.js";
 import { IntentBookABI } from "./abi/IntentBook.js";
 import { PolicyModuleABI } from "./abi/PolicyModule.js";
 import { AttestationRegistryABI } from "./abi/AttestationRegistry.js";
+import { SolverRegistryABI } from "./abi/SolverRegistry.js";
+import { AttestorRegistryABI } from "./abi/AttestorRegistry.js";
+import { CommerceRegistryABI } from "./abi/CommerceRegistry.js";
 import {
   handleAgentRegistered,
   handleAgentUpdated,
@@ -13,18 +16,28 @@ import {
 import {
   handleIntentSubmitted,
   handleIntentFilled,
+  handleIntentFillProof,
   handleIntentCancelled,
+  handleSolverBidSubmitted,
+  handleSolverBidSelected,
 } from "./handlers/intents.js";
 import {
   handleSpendLimitSet,
   handleTargetAllowlistUpdated,
   handleFunctionAllowlistUpdated,
   handleSpendRecorded,
+  handlePaymentPolicySet,
+  handleSignedPaymentRecorded,
+  handleFunctionAllowlistModeUpdated,
+  handleGuardianSet,
+  handleAccountFrozen,
 } from "./handlers/policies.js";
 import {
   handleAttestationSubmitted,
   handleAttestationRevoked,
 } from "./handlers/attestations.js";
+import { handleSolverRegistryLog, handleAttestorRegistryLog } from "./handlers/participants.js";
+import { handleCommerceRegistryLog } from "./handlers/commerce.js";
 import { setLastProcessedBlock } from "./db.js";
 import { logger } from "./logger.js";
 
@@ -38,6 +51,9 @@ export class EventPoller {
   private lastProcessedBlock: bigint;
   private contracts: ContractConfig[];
   private attestationRegistryAddress: Address | null;
+  private solverRegistryAddress: Address | null;
+  private attestorRegistryAddress: Address | null;
+  private commerceRegistryAddress: Address | null;
 
   constructor(
     private client: PublicClient,
@@ -47,9 +63,15 @@ export class EventPoller {
     private policyModuleAddress: Address,
     startBlock: bigint,
     attestationRegistryAddress: Address | null = null,
+    solverRegistryAddress: Address | null = null,
+    attestorRegistryAddress: Address | null = null,
+    commerceRegistryAddress: Address | null = null,
   ) {
     this.lastProcessedBlock = startBlock > 0n ? startBlock - 1n : 0n;
     this.attestationRegistryAddress = attestationRegistryAddress;
+    this.solverRegistryAddress = solverRegistryAddress;
+    this.attestorRegistryAddress = attestorRegistryAddress;
+    this.commerceRegistryAddress = commerceRegistryAddress;
     this.contracts = [
       { address: agentRegistryAddress, abi: AgentRegistryABI as unknown as readonly unknown[], name: "AgentRegistry" },
       { address: intentBookAddress, abi: IntentBookABI as unknown as readonly unknown[], name: "IntentBook" },
@@ -60,6 +82,27 @@ export class EventPoller {
         address: attestationRegistryAddress,
         abi: AttestationRegistryABI as unknown as readonly unknown[],
         name: "AttestationRegistry",
+      });
+    }
+    if (solverRegistryAddress) {
+      this.contracts.push({
+        address: solverRegistryAddress,
+        abi: SolverRegistryABI as unknown as readonly unknown[],
+        name: "SolverRegistry",
+      });
+    }
+    if (attestorRegistryAddress) {
+      this.contracts.push({
+        address: attestorRegistryAddress,
+        abi: AttestorRegistryABI as unknown as readonly unknown[],
+        name: "AttestorRegistry",
+      });
+    }
+    if (commerceRegistryAddress) {
+      this.contracts.push({
+        address: commerceRegistryAddress,
+        abi: CommerceRegistryABI as unknown as readonly unknown[],
+        name: "CommerceRegistry",
       });
     }
   }
@@ -121,6 +164,12 @@ export class EventPoller {
       await this.routePolicyModuleLog(log);
     } else if (this.attestationRegistryAddress && address === this.attestationRegistryAddress.toLowerCase()) {
       await this.routeAttestationRegistryLog(log);
+    } else if (this.solverRegistryAddress && address === this.solverRegistryAddress.toLowerCase()) {
+      await this.routeSolverRegistryLog(log);
+    } else if (this.attestorRegistryAddress && address === this.attestorRegistryAddress.toLowerCase()) {
+      await this.routeAttestorRegistryLog(log);
+    } else if (this.commerceRegistryAddress && address === this.commerceRegistryAddress.toLowerCase()) {
+      await this.routeCommerceRegistryLog(log);
     }
   }
 
@@ -163,8 +212,17 @@ export class EventPoller {
         case "IntentFilled":
           await handleIntentFilled(this.pool, log);
           break;
+        case "IntentFillProof":
+          await handleIntentFillProof(this.pool, log);
+          break;
         case "IntentCancelled":
           await handleIntentCancelled(this.pool, log);
+          break;
+        case "SolverBidSubmitted":
+          await handleSolverBidSubmitted(this.pool, log);
+          break;
+        case "SolverBidSelected":
+          await handleSolverBidSelected(this.pool, log);
           break;
       }
     } catch (err) {
@@ -193,6 +251,21 @@ export class EventPoller {
         case "SpendRecorded":
           await handleSpendRecorded(log);
           break;
+        case "PaymentPolicySet":
+          await handlePaymentPolicySet(this.pool, log);
+          break;
+        case "SignedPaymentRecorded":
+          await handleSignedPaymentRecorded(log);
+          break;
+        case "FunctionAllowlistModeUpdated":
+          await handleFunctionAllowlistModeUpdated(this.pool, log);
+          break;
+        case "GuardianSet":
+          await handleGuardianSet(this.pool, log);
+          break;
+        case "AccountFrozen":
+          await handleAccountFrozen(this.pool, log);
+          break;
       }
     } catch (err) {
       logger.warn(`Failed to decode PolicyModule log: ${err}`);
@@ -209,7 +282,7 @@ export class EventPoller {
 
       switch (decoded.eventName) {
         case "AttestationSubmitted":
-          await handleAttestationSubmitted(this.pool, log);
+          await handleAttestationSubmitted(this.pool, this.client, log, this.attestationRegistryAddress!);
           break;
         case "AttestationRevoked":
           await handleAttestationRevoked(this.pool, log);
@@ -217,6 +290,30 @@ export class EventPoller {
       }
     } catch (err) {
       logger.warn(`Failed to decode AttestationRegistry log: ${err}`);
+    }
+  }
+
+  private async routeSolverRegistryLog(log: Log): Promise<void> {
+    try {
+      await handleSolverRegistryLog(this.pool, log);
+    } catch (err) {
+      logger.warn(`Failed to decode SolverRegistry log: ${err}`);
+    }
+  }
+
+  private async routeAttestorRegistryLog(log: Log): Promise<void> {
+    try {
+      await handleAttestorRegistryLog(this.pool, log);
+    } catch (err) {
+      logger.warn(`Failed to decode AttestorRegistry log: ${err}`);
+    }
+  }
+
+  private async routeCommerceRegistryLog(log: Log): Promise<void> {
+    try {
+      await handleCommerceRegistryLog(this.pool, log);
+    } catch (err) {
+      logger.warn(`Failed to decode CommerceRegistry log: ${err}`);
     }
   }
 
@@ -262,6 +359,12 @@ export class EventPoller {
         return decodeEventLog({ abi: PolicyModuleABI, data: log.data, topics: log.topics });
       } else if (this.attestationRegistryAddress && address === this.attestationRegistryAddress.toLowerCase()) {
         return decodeEventLog({ abi: AttestationRegistryABI, data: log.data, topics: log.topics });
+      } else if (this.solverRegistryAddress && address === this.solverRegistryAddress.toLowerCase()) {
+        return decodeEventLog({ abi: SolverRegistryABI, data: log.data, topics: log.topics });
+      } else if (this.attestorRegistryAddress && address === this.attestorRegistryAddress.toLowerCase()) {
+        return decodeEventLog({ abi: AttestorRegistryABI, data: log.data, topics: log.topics });
+      } else if (this.commerceRegistryAddress && address === this.commerceRegistryAddress.toLowerCase()) {
+        return decodeEventLog({ abi: CommerceRegistryABI, data: log.data, topics: log.topics });
       }
     } catch {
       // Failed to decode, return null

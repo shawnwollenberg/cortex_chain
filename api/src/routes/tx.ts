@@ -23,6 +23,8 @@ function describeEvent(event: EventSummary): string {
       return `Intent #${args.intentId} submitted by ${args.owner}`;
     case "IntentFilled":
       return `Intent #${args.intentId} filled by solver ${args.solver} (in: ${args.amountIn}, out: ${args.amountOut})`;
+    case "IntentFillProof":
+      return `Intent #${args.intentId} fill proof recorded`;
     case "IntentCancelled":
       return `Intent #${args.intentId} cancelled`;
     case "SpendLimitSet":
@@ -37,6 +39,20 @@ function describeEvent(event: EventSummary): string {
       return `Attestation #${args.id} submitted by ${args.attester} (schema: ${args.schema})`;
     case "AttestationRevoked":
       return `Attestation #${args.id} revoked`;
+    case "MerchantRegistered":
+      return `Merchant #${args.merchantId} registered by ${args.owner}`;
+    case "ServiceRegistered":
+      return `Service #${args.serviceNumericId} registered for merchant #${args.merchantId}`;
+    case "FacilitatorRegistered":
+      return `Facilitator #${args.facilitatorId} registered`;
+    case "QuoteCommitted":
+      return `Quote ${args.quoteHash} committed for merchant #${args.merchantId}`;
+    case "ReceiptRecorded":
+      return `Commerce receipt #${args.receiptId} recorded`;
+    case "DisputeOpened":
+      return `Dispute #${args.disputeId} opened for receipt #${args.receiptId}`;
+    case "DisputeResolved":
+      return `Dispute #${args.disputeId} resolved`;
     default:
       return `${eventName} event`;
   }

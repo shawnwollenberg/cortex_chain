@@ -35,6 +35,7 @@ contracts/   Solidity (Foundry): AgentRegistry, PolicyModule, IntentBook, Attest
 solver/      TypeScript offchain service: watches intents, simulates, executes fills
 indexer/     Event ingestion into Postgres
 api/         REST API for agent-readable queries
+sdk/         TypeScript SDK for agent intent creation, preflight, and metadata reservation
 mcp/         Model Context Protocol server for AI agent integration
 web/         Documentation website
 ops/         Docker Compose, deploy scripts, observability
@@ -91,6 +92,8 @@ Built with Foundry and OpenZeppelin. Solidity 0.8.24.
 | `PolicyModule` | Policy enforcement: spend limits, target/function allowlists |
 | `PolicyAccount` | ERC-4337 smart account with policy validation |
 | `AttestationRegistry` | Signed provenance for offchain inputs |
+| `SolverRegistry` | Permissionless solver metadata, bond, and reputation counters |
+| `AttestorRegistry` | Permissionless attestor metadata and schema support |
 
 ```bash
 cd contracts
@@ -108,7 +111,8 @@ All TypeScript, using viem and node-postgres.
 | Indexer | - | Polls chain events, writes to Postgres |
 | Solver | - | Watches intents, simulates, fills |
 | API | 3001 | REST endpoints for agents, intents, policies, tx explain |
-| MCP | stdio | Tools: `lookup_agent`, `list_open_intents`, `get_policy`, `explain_tx` |
+| MCP | stdio | Tools: `lookup_agent`, `list_open_intents`, `get_policy`, `explain_tx`, `list_solvers`, `list_attestors` |
+| SDK | - | Agent client for signed intent creation, policy preflight, and execution metadata reservation |
 
 ## Tech Stack
 
@@ -124,13 +128,15 @@ All TypeScript, using viem and node-postgres.
 ## Documentation
 
 - [Local Development](docs/local-dev.md)
+- [Usage and Testing](docs/usage-testing.md)
 - [Testnet Deployment](docs/testnet-deploy.md)
 - [Architecture](docs/architecture.md)
 - [Contracts Reference](docs/contracts.md)
 - [REST API Reference](docs/api.md)
 - [MCP Server](docs/mcp.md)
 - [Design Decisions](docs/decisions.md)
-- [Security / Threat Model](docs/security.md)
+- [Protocol Roadmap](docs/protocol-roadmap.md)
+- [Security / Threat Model](docs/threat-model.md)
 
 ## License
 

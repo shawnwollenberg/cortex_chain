@@ -5,6 +5,7 @@ import { useState } from "react";
 
 const NAV_LINKS = [
   { href: "/overview", label: "Overview" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/docs", label: "Docs" },
   { href: "https://github.com/shawnwollenberg/cortex_chain", label: "GitHub" },
 ];

@@ -3,11 +3,13 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IntentBook} from "../src/IntentBook.sol";
+import {AttestationRegistry} from "../src/AttestationRegistry.sol";
 import {IIntentBook} from "../src/interfaces/IIntentBook.sol";
-import {Intent, Fill, IntentStatus, IntentType, Constraints, IntentTypehashes} from "../src/libraries/IntentTypes.sol";
+import {Intent, Fill, IntentStatus, IntentType, Constraints, ExecutionRequirements, IntentTypehashes} from "../src/libraries/IntentTypes.sol";
 
 contract IntentBookFuzzTest is Test {
     IntentBook public book;
+    AttestationRegistry public attestations;
 
     uint256 internal ownerPk;
     address internal owner;
@@ -19,7 +21,8 @@ contract IntentBookFuzzTest is Test {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     function setUp() public {
-        book = new IntentBook();
+        attestations = new AttestationRegistry();
+        book = new IntentBook(address(attestations));
         (owner, ownerPk) = makeAddrAndKey("owner");
     }
 
@@ -32,6 +35,24 @@ contract IntentBookFuzzTest is Test {
         bytes32 structHash = IntentTypehashes.hashIntent(intent);
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(pk, digest);
+    }
+
+    function _defaultExecution() internal pure returns (ExecutionRequirements memory) {
+        return ExecutionRequirements({
+            target: address(0),
+            dataHash: bytes32(0),
+            requiredAttestationSubject: bytes32(0),
+            requiredAttestationSchema: bytes32(0),
+            metadataURIHash: bytes32(0)
+        });
+    }
+
+    function _submitBidAndSelect(uint256 intentId, uint256 amountIn, uint256 amountOut) internal {
+        uint256 validUntil = book.getIntent(intentId).constraints.deadline;
+        vm.prank(solver);
+        uint256 bidId = book.submitBid(intentId, amountIn, amountOut, 0, validUntil, bytes32(0));
+        vm.prank(owner);
+        book.selectBid(intentId, bidId);
     }
 
     // ── Constraint boundary fuzzing ──────────────────────────────────
@@ -57,6 +78,7 @@ contract IntentBookFuzzTest is Test {
                 deadline: block.timestamp + deadlineOffset,
                 slippageBps: slippageBps
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: nonce
@@ -84,6 +106,7 @@ contract IntentBookFuzzTest is Test {
                 deadline: block.timestamp + 1 hours,
                 slippageBps: slippageBps
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: 1
@@ -106,6 +129,7 @@ contract IntentBookFuzzTest is Test {
                 deadline: deadlineOffset, // at or before current timestamp
                 slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: 1
@@ -130,6 +154,7 @@ contract IntentBookFuzzTest is Test {
             constraints: Constraints({
                 amountInMax: maxIn, amountOutMin: minOut, deadline: block.timestamp + 1 hours, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: 1
@@ -137,8 +162,10 @@ contract IntentBookFuzzTest is Test {
 
         (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
         uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, amountIn, amountOut);
 
-        Fill memory fill = Fill({amountIn: amountIn, amountOut: amountOut, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: amountIn, amountOut: amountOut, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
         book.fillIntent(intentId, fill);
         assertEq(uint8(book.getIntentStatus(intentId)), uint8(IntentStatus.FILLED));
     }
@@ -153,6 +180,7 @@ contract IntentBookFuzzTest is Test {
             constraints: Constraints({
                 amountInMax: maxIn, amountOutMin: 500e18, deadline: block.timestamp + 1 hours, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: 1
@@ -160,8 +188,10 @@ contract IntentBookFuzzTest is Test {
 
         (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
         uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, maxIn, 500e18);
 
-        Fill memory fill = Fill({amountIn: amountIn, amountOut: 500e18, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: amountIn, amountOut: 500e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
         vm.expectRevert(IIntentBook.ConstraintViolation.selector);
         book.fillIntent(intentId, fill);
     }
@@ -176,6 +206,7 @@ contract IntentBookFuzzTest is Test {
             constraints: Constraints({
                 amountInMax: 1000e18, amountOutMin: minOut, deadline: block.timestamp + 1 hours, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: 1
@@ -183,8 +214,10 @@ contract IntentBookFuzzTest is Test {
 
         (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
         uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, 1000e18, minOut);
 
-        Fill memory fill = Fill({amountIn: 1000e18, amountOut: amountOut, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: 1000e18, amountOut: amountOut, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
         vm.expectRevert(IIntentBook.ConstraintViolation.selector);
         book.fillIntent(intentId, fill);
     }
@@ -203,6 +236,7 @@ contract IntentBookFuzzTest is Test {
             constraints: Constraints({
                 amountInMax: 1000e18, amountOutMin: 900e18, deadline: block.timestamp + 1 hours, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: 1
@@ -222,6 +256,7 @@ contract IntentBookFuzzTest is Test {
             constraints: Constraints({
                 amountInMax: 1000e18, amountOutMin: 900e18, deadline: block.timestamp + 1 hours, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: nonce
@@ -250,6 +285,7 @@ contract IntentBookFuzzTest is Test {
             constraints: Constraints({
                 amountInMax: 1000e18, amountOutMin: 900e18, deadline: deadline, slippageBps: 100
             }),
+            execution: _defaultExecution(),
             inputToken: tokenIn,
             outputToken: tokenOut,
             nonce: 1
@@ -257,11 +293,13 @@ contract IntentBookFuzzTest is Test {
 
         (uint8 v, bytes32 r, bytes32 s) = _signIntent(intent, ownerPk);
         uint256 intentId = book.submitIntent(intent, v, r, s);
+        _submitBidAndSelect(intentId, 950e18, 900e18);
 
         // Warp past the deadline
         vm.warp(deadline + warpPast);
 
-        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: ""});
+        Fill memory fill = Fill({amountIn: 950e18, amountOut: 900e18, solver: solver, executionData: "", resultHash: bytes32(0), traceHash: bytes32(0), attestationId: 0});
+        vm.prank(solver);
         vm.expectRevert(IIntentBook.IntentExpired.selector);
         book.fillIntent(intentId, fill);
     }

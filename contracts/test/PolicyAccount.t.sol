@@ -20,29 +20,67 @@ contract MockTarget {
     receive() external payable {}
 }
 
+contract MockToken {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        uint256 allowed = allowance[from][msg.sender];
+        if (allowed != type(uint256).max) {
+            allowance[from][msg.sender] = allowed - amount;
+        }
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
 contract PolicyAccountTest is Test {
     PolicyModule public module;
     PolicyAccount public acct;
     MockTarget public target;
+    MockToken public token;
 
     address public entryPoint = 0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108;
     address public signer;
     uint256 public signerKey;
+    address public sessionSigner;
+    uint256 public sessionKey;
 
     function setUp() public {
         (signer, signerKey) = makeAddrAndKey("signer");
+        (sessionSigner, sessionKey) = makeAddrAndKey("session");
 
         module = new PolicyModule();
         acct = new PolicyAccount(signer, IPolicyModule(address(module)));
         target = new MockTarget();
+        token = new MockToken();
 
         // Fund the account
         vm.deal(address(acct), 10 ether);
+        token.mint(address(acct), 10_000 ether);
 
         // Configure policies via entryPoint (simulating UserOp execution)
         vm.startPrank(entryPoint);
         acct.setTargetAllowed(address(target), true);
+        acct.setTargetAllowed(address(token), true);
         acct.setSpendLimit(address(0), 2 ether);
+        acct.setSpendLimit(address(token), 1_000 ether);
         vm.stopPrank();
     }
 
@@ -101,6 +139,105 @@ contract PolicyAccountTest is Test {
         );
         acct.execute(address(target), 1 ether, "");
         vm.stopPrank();
+    }
+
+    function test_execute_recordsErc20TransferSpend() public {
+        address recipient = makeAddr("recipient");
+
+        vm.prank(entryPoint);
+        acct.execute(address(token), 0, abi.encodeCall(MockToken.transfer, (recipient, 250 ether)));
+
+        assertEq(token.balanceOf(recipient), 250 ether);
+        assertEq(module.getSpentToday(address(acct), address(token)), 250 ether);
+    }
+
+    function test_execute_blocksErc20TransferOverLimit() public {
+        address recipient = makeAddr("recipient");
+
+        vm.prank(entryPoint);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IPolicyModule.DailySpendLimitExceeded.selector, address(token), 1_001 ether, 1_000 ether
+            )
+        );
+        acct.execute(address(token), 0, abi.encodeCall(MockToken.transfer, (recipient, 1_001 ether)));
+    }
+
+    function test_execute_recordsErc20ApprovalSpend() public {
+        address spender = makeAddr("spender");
+
+        vm.prank(entryPoint);
+        acct.execute(address(token), 0, abi.encodeCall(MockToken.approve, (spender, 400 ether)));
+
+        assertEq(token.allowance(address(acct), spender), 400 ether);
+        assertEq(module.getSpentToday(address(acct), address(token)), 400 ether);
+    }
+
+    function test_execute_blocksWhenFrozen() public {
+        vm.prank(entryPoint);
+        acct.setAccountFrozen(true);
+
+        vm.prank(entryPoint);
+        vm.expectRevert(abi.encodeWithSelector(IPolicyModule.AccountFrozenError.selector, address(acct)));
+        acct.execute(address(target), 0, abi.encodeCall(MockTarget.setValue, (1)));
+    }
+
+    function test_guardianCanFreezeAccount() public {
+        address guardian = makeAddr("guardian");
+
+        vm.prank(entryPoint);
+        acct.setGuardian(guardian);
+
+        vm.prank(guardian);
+        module.setAccountFrozen(address(acct), true);
+
+        assertTrue(module.isAccountFrozen(address(acct)));
+    }
+
+    // ── Session keys ────────────────────────────────────────────────
+
+    function test_executeWithSessionKey() public {
+        bytes memory data = abi.encodeCall(MockTarget.setValue, (77));
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = 1;
+        bytes memory signature = _signSessionCall(address(target), 0, data, deadline, nonce, sessionKey);
+
+        vm.prank(entryPoint);
+        acct.setSessionKey(sessionSigner, uint48(block.timestamp + 2 hours), true);
+
+        acct.executeWithSessionKey(address(target), 0, data, deadline, nonce, signature);
+
+        assertEq(target.value(), 77);
+        assertTrue(acct.usedSessionNonces(sessionSigner, nonce));
+    }
+
+    function test_executeWithSessionKey_rejectsReplay() public {
+        bytes memory data = abi.encodeCall(MockTarget.setValue, (77));
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = 1;
+        bytes memory signature = _signSessionCall(address(target), 0, data, deadline, nonce, sessionKey);
+
+        vm.prank(entryPoint);
+        acct.setSessionKey(sessionSigner, uint48(block.timestamp + 2 hours), true);
+
+        acct.executeWithSessionKey(address(target), 0, data, deadline, nonce, signature);
+
+        vm.expectRevert(PolicyAccount.SessionNonceUsed.selector);
+        acct.executeWithSessionKey(address(target), 0, data, deadline, nonce, signature);
+    }
+
+    function test_executeWithSessionKey_rejectsDisallowedTarget() public {
+        MockTarget disallowed = new MockTarget();
+        bytes memory data = abi.encodeCall(MockTarget.setValue, (77));
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = 1;
+        bytes memory signature = _signSessionCall(address(disallowed), 0, data, deadline, nonce, sessionKey);
+
+        vm.prank(entryPoint);
+        acct.setSessionKey(sessionSigner, uint48(block.timestamp + 2 hours), true);
+
+        vm.expectRevert(abi.encodeWithSelector(IPolicyModule.TargetNotAllowed.selector, address(disallowed)));
+        acct.executeWithSessionKey(address(disallowed), 0, data, deadline, nonce, signature);
     }
 
     // ── Execute blocked by function allowlist ────────────────────────
@@ -261,6 +398,24 @@ contract PolicyAccountTest is Test {
             paymasterAndData: "",
             signature: ""
         });
+    }
+
+    function _signSessionCall(
+        address callTarget,
+        uint256 value,
+        bytes memory data,
+        uint256 deadline,
+        uint256 nonce,
+        uint256 key
+    ) internal view returns (bytes memory) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(abi.encode(address(acct), block.chainid, callTarget, value, keccak256(data), deadline, nonce))
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, digest);
+        return abi.encodePacked(r, s, v);
     }
 }
 
