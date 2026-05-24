@@ -1,28 +1,28 @@
 const STEPS = [
   {
     step: "1",
-    title: "Register identity",
-    description: "Agent calls AgentRegistry with metadata, pubkey, and capabilities hash.",
+    title: "Publish services",
+    description: "Merchants register services, metadata hashes, capability hashes, and payment preferences in CommerceRegistry.",
   },
   {
     step: "2",
-    title: "Configure policies",
-    description: "Owner sets spend limits, target allowlists, and function-level permissions via PolicyModule.",
+    title: "Set agent budgets",
+    description: "Owners configure spend limits, target allowlists, swap permissions, facilitator budgets, and x402 payment policy.",
   },
   {
     step: "3",
-    title: "Sign & submit intent",
-    description: "Agent signs an EIP-712 typed intent with constraints (max input, min output, deadline) and submits it to IntentBook.",
+    title: "Commit quote terms",
+    description: "A merchant commits a quote that binds service, agent, token, amount, payment rail, expiry, nonce, resource hash, and terms hash.",
   },
   {
     step: "4",
-    title: "Solver fills intent",
-    description: "Solver watches for IntentSubmitted events, validates constraints, simulates via eth_call, and calls fillIntent().",
+    title: "Execute payment",
+    description: "Payment can happen through wallet transfer, ERC-20 transfer, swap, facilitator-mediated settlement, or x402.",
   },
   {
     step: "5",
-    title: "Query state",
-    description: "Indexer ingests all events into Postgres. REST API and MCP server provide machine-readable access.",
+    title: "Record signals",
+    description: "Receipts, disputes, solver activity, and analytics are indexed for agents, dashboards, marketplaces, and MCP tools.",
   },
 ];
 

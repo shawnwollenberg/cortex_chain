@@ -14,34 +14,40 @@ export const metadata: Metadata = {
 
 const FEATURES = [
   {
-    icon: "\u{1F916}",
-    title: "Agent Identity",
+    icon: "ID",
+    title: "Agent identity and budgets",
     description:
-      "Agents register onchain with metadata, pubkeys, and capability hashes. Identity is wallet-equals-process, not wallet-equals-user.",
+      "Agents can register identity, execute through policy-aware smart accounts, and operate within delegated budgets.",
   },
   {
-    icon: "\u{1F6E1}",
-    title: "Policy Guardrails",
+    icon: "MR",
+    title: "Merchant and service discovery",
     description:
-      "ERC-4337 smart accounts enforce daily spend limits, target allowlists, and function-level permissions — all on-chain.",
+      "Merchants publish onchain service records with metadata hashes, capability hashes, payout context, and active status.",
   },
   {
-    icon: "\u{1F4E8}",
-    title: "Intent System",
+    icon: "QT",
+    title: "Verifiable quote commitments",
     description:
-      "Agents sign EIP-712 typed intents with constraints. Solvers compete to fill them within bounds. No direct DEX interaction needed.",
+      "Quotes bind service, agent, token, amount, expiry, nonce, payment rail, resource hash, terms hash, and fee terms.",
   },
   {
-    icon: "\u{1F50D}",
-    title: "Machine-Readable State",
+    icon: "PY",
+    title: "Multiple payment rails",
     description:
-      "Every event is indexed into Postgres. REST API and MCP server provide structured, queryable access for agents and frontends.",
+      "Cortex supports wallet transfers, ERC-20 transfers, swaps, facilitator-mediated payments, and x402 acceptance.",
   },
   {
-    icon: "\u2713",
-    title: "Verifiable Inputs",
+    icon: "RC",
+    title: "Receipts and disputes",
     description:
-      "Optional attestation registry lets agents record signed provenance for off-chain inputs like price quotes and simulation results.",
+      "Settled commerce creates receipt records and dispute signals that can feed reputation for agents and merchants.",
+  },
+  {
+    icon: "AN",
+    title: "Analytics and APIs",
+    description:
+      "Indexer, REST API, MCP tools, and dashboard expose protocol state for agents, developers, and operators.",
   },
 ];
 
@@ -53,7 +59,7 @@ export default function Home() {
       <section className="py-20 border-t border-border">
         <div className="mx-auto max-w-6xl px-4">
           <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
-            Built for autonomous agents
+            Built for agentic commerce
           </h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
@@ -72,15 +78,23 @@ export default function Home() {
         <div className="mx-auto max-w-2xl px-4 text-center">
           <h2 className="text-2xl md:text-3xl font-bold mb-4">Start building</h2>
           <p className="text-muted mb-8">
-            Deploy the full stack locally in under 5 minutes. Register an agent, set policies,
-            submit intents, and query results.
+            Run the full stack locally, register merchants and services, configure agent policy,
+            commit quotes, record receipts, and inspect protocol analytics.
           </p>
-          <a
-            href="/docs/local-dev"
-            className="inline-block px-6 py-3 rounded-lg bg-gradient-to-r from-accent-purple to-accent-blue text-white font-medium text-sm hover:opacity-90 transition-opacity"
-          >
-            Local dev guide
-          </a>
+          <div className="flex flex-wrap justify-center gap-3">
+            <a
+              href="/docs/local-dev"
+              className="inline-block rounded-lg bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#06110d] transition-colors hover:bg-emerald-300"
+            >
+              Local dev guide
+            </a>
+            <a
+              href="/docs/architecture"
+              className="inline-block rounded-lg border border-border px-5 py-3 text-sm font-semibold text-muted transition-colors hover:border-cyan-300/70 hover:text-text"
+            >
+              Architecture docs
+            </a>
+          </div>
         </div>
       </section>
     </>
