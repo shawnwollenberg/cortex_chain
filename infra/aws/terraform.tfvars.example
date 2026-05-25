@@ -1,0 +1,21 @@
+aws_profile          = "wallyweb"
+aws_region           = "us-east-1"
+hosted_zone_name     = "wallyweb.com"
+frontend_domain_name = "cortex.wallyweb.com"
+api_domain_name      = "api.cortex.wallyweb.com"
+
+base_sepolia_rpc_url = "https://sepolia.base.org"
+start_block          = 0
+
+# Fill these after ops/deploy-testnet.sh writes ops/.env.testnet.
+agent_registry_address       = ""
+intent_book_address          = ""
+policy_module_address        = ""
+attestation_registry_address = ""
+solver_registry_address      = ""
+attestor_registry_address    = ""
+commerce_registry_address    = ""
+
+# Leave at 0 for the first terraform apply, then push images and set these to 1.
+api_desired_count     = 0
+indexer_desired_count = 0

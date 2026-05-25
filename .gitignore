@@ -2,6 +2,11 @@ node_modules/
 dist/
 .env
 .env.deployed
+ops/.env*
+infra/aws/terraform.tfvars
+infra/aws/*.tfstate
+infra/aws/*.tfstate.*
+infra/aws/.terraform/
 *.pid
 *.log
 .next/

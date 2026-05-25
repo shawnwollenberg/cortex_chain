@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/dist
+**/.next
+**/out
+contracts/cache
+contracts/out
+contracts/broadcast
+ops/*.log
+ops/.env*
+infra/aws/.terraform
+infra/aws/*.tfstate
+infra/aws/*.tfstate.*

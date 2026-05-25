@@ -95,6 +95,7 @@ INTENT_BOOK=$(jq -r '.transactions[3].contractAddress' "$BROADCAST_FILE")
 SOLVER_REGISTRY=$(jq -r '.transactions[4].contractAddress' "$BROADCAST_FILE")
 ATTESTOR_REGISTRY=$(jq -r '.transactions[5].contractAddress' "$BROADCAST_FILE")
 COMMERCE_REGISTRY=$(jq -r '.transactions[6].contractAddress' "$BROADCAST_FILE")
+START_BLOCK=$(jq -r '[.receipts[]?.blockNumber] | map(select(. != null)) | min // 0' "$BROADCAST_FILE")
 
 echo ""
 echo "==> Deployed contracts:"
@@ -105,6 +106,7 @@ echo "    AttestationRegistry:  $ATTESTATION_REGISTRY"
 echo "    SolverRegistry:       $SOLVER_REGISTRY"
 echo "    AttestorRegistry:     $ATTESTOR_REGISTRY"
 echo "    CommerceRegistry:     $COMMERCE_REGISTRY"
+echo "    Start block:          $START_BLOCK"
 
 # Write .env.testnet — references env vars for secrets, stores addresses directly
 cat > "$ENV_FILE" <<EOF
@@ -116,6 +118,7 @@ CHAIN_ID=$CHAIN_ID
 DATABASE_URL=$DATABASE_URL
 API_URL=$API_URL
 API_PORT=$API_PORT
+START_BLOCK=$START_BLOCK
 
 # Contract addresses
 AGENT_REGISTRY_ADDRESS=$AGENT_REGISTRY
