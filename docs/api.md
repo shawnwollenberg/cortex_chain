@@ -381,6 +381,7 @@ Response `200`:
   "token": "0x...",
   "facilitator": "0x...",
   "amount": "1000000000000000000",
+  "payment_rail": 3,
   "protocol_fee_bps": 0,
   "protocol_fee_amount": "0",
   "expires_at": "1779652362",
@@ -392,7 +393,7 @@ Response `200`:
 }
 ```
 
-The `x402_payload_hash` is used when the payment rail is x402. For basic transfers or swaps, quote terms can bind the payment data through the resource/terms hashes and normal policy checks.
+Payment rails are `0=transfer`, `1=swap`, `2=facilitator`, and `3=x402`. The `x402_payload_hash` is used when the payment rail is x402. For basic transfers or swaps, quote terms can bind the payment data through the resource/terms hashes and normal policy checks.
 
 #### List Receipts
 
@@ -400,7 +401,23 @@ The `x402_payload_hash` is used when the payment rail is x402. For basic transfe
 GET /receipts?agent=0x...&merchant_id=1&limit=50&offset=0
 ```
 
-Returns settled commerce receipts with amount, token, facilitator, result hash, resource hash, and zero-fee protocol instrumentation.
+Returns settled commerce receipts with amount, token, payment rail, facilitator, result hash, resource hash, fulfillment hash, and zero-fee protocol instrumentation.
+
+#### Get Merchant Reputation
+
+```
+GET /merchants/:id/reputation
+```
+
+Returns merchant details plus receipt count, settled volume, fulfilled receipt count, dispute counts, and trust signal counts grouped by kind.
+
+#### List Trust Signals
+
+```
+GET /trust-signals?subject_type=0&subject_id=1&kind=0&reporter=0x...&limit=50&offset=0
+```
+
+Trust signal subject types are `0=merchant`, `1=service`, `2=facilitator`, and `3=agent`. Kinds are `0=verification`, `1=risk`, `2=compliance`, and `3=fulfillment`.
 
 #### List Disputes
 
@@ -445,7 +462,9 @@ Response `200`:
   "volume_by_token": [],
   "top_merchants": [],
   "top_services": [],
-  "facilitator_volume": []
+  "facilitator_volume": [],
+  "volume_by_payment_rail": [],
+  "trust_signals_by_kind": []
 }
 ```
 

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS quotes (
   token              TEXT NOT NULL,
   facilitator        TEXT NOT NULL,
   amount             NUMERIC NOT NULL,
+  payment_rail       INTEGER NOT NULL DEFAULT 0,
   protocol_fee_bps   INTEGER NOT NULL DEFAULT 0,
   protocol_fee_amount NUMERIC NOT NULL DEFAULT 0,
   expires_at         NUMERIC NOT NULL,
@@ -75,11 +76,13 @@ CREATE TABLE IF NOT EXISTS commerce_receipts (
   service_numeric_id NUMERIC NOT NULL REFERENCES services(service_numeric_id),
   token              TEXT NOT NULL,
   amount             NUMERIC NOT NULL,
+  payment_rail       INTEGER NOT NULL DEFAULT 0,
   protocol_fee_bps   INTEGER NOT NULL DEFAULT 0,
   protocol_fee_amount NUMERIC NOT NULL DEFAULT 0,
   facilitator        TEXT NOT NULL,
   result_hash        TEXT NOT NULL,
   resource_hash      TEXT NOT NULL,
+  fulfillment_hash   TEXT NOT NULL DEFAULT '',
   block_number       BIGINT NOT NULL,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -100,3 +103,18 @@ CREATE TABLE IF NOT EXISTS disputes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_disputes_receipt ON disputes (receipt_id);
+
+CREATE TABLE IF NOT EXISTS trust_signals (
+  signal_id    NUMERIC PRIMARY KEY,
+  subject_type INTEGER NOT NULL,
+  subject_id   NUMERIC NOT NULL,
+  kind         INTEGER NOT NULL,
+  reporter     TEXT NOT NULL,
+  signal_hash  TEXT NOT NULL,
+  block_number BIGINT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trust_signals_subject ON trust_signals (subject_type, subject_id);
+CREATE INDEX IF NOT EXISTS idx_trust_signals_kind ON trust_signals (kind);
+CREATE INDEX IF NOT EXISTS idx_trust_signals_reporter ON trust_signals (reporter);

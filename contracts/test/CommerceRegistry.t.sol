@@ -43,6 +43,7 @@ contract CommerceRegistryTest is Test {
             token,
             facilitator,
             1e6,
+            CommerceRegistry.PaymentRail.X402,
             expiresAt,
             paymentNonce,
             resourceHash,
@@ -57,6 +58,7 @@ contract CommerceRegistryTest is Test {
                 token: token,
                 facilitator: facilitator,
                 amount: 1e6,
+                paymentRail: CommerceRegistry.PaymentRail.X402,
                 expiresAt: expiresAt,
                 paymentNonce: paymentNonce,
                 resourceHash: resourceHash,
@@ -72,8 +74,14 @@ contract CommerceRegistryTest is Test {
         assertTrue(registry.getQuote(quoteHash).settled);
         assertEq(registry.getQuote(quoteHash).protocolFeeBps, 0);
         assertEq(registry.getQuote(quoteHash).protocolFeeAmount, 0);
+        assertEq(uint8(registry.getQuote(quoteHash).paymentRail), uint8(CommerceRegistry.PaymentRail.X402));
         assertEq(registry.getReceipt(receiptId).protocolFeeBps, 0);
         assertEq(registry.getReceipt(receiptId).protocolFeeAmount, 0);
+        assertEq(uint8(registry.getReceipt(receiptId).paymentRail), uint8(CommerceRegistry.PaymentRail.X402));
+
+        vm.prank(merchant);
+        registry.recordFulfillment(receiptId, keccak256("fulfillment"));
+        assertEq(registry.getReceipt(receiptId).fulfillmentHash, keccak256("fulfillment"));
 
         vm.prank(agent);
         uint256 disputeId = registry.openDispute(receiptId, keccak256("timeout"));
@@ -82,6 +90,15 @@ contract CommerceRegistryTest is Test {
         vm.prank(merchant);
         registry.resolveDispute(disputeId, CommerceRegistry.DisputeStatus.RESOLVED, keccak256("refund-issued"));
         assertEq(uint8(registry.getDispute(disputeId).status), uint8(CommerceRegistry.DisputeStatus.RESOLVED));
+
+        vm.prank(agent);
+        uint256 signalId = registry.recordTrustSignal(
+            CommerceRegistry.SignalSubject.MERCHANT,
+            merchantId,
+            CommerceRegistry.SignalKind.RISK,
+            keccak256("risk-signal")
+        );
+        assertEq(registry.getTrustSignal(signalId).reporter, agent);
     }
 
     function test_commitQuote_revertIfFacilitatorNotRegistered() public {
@@ -106,6 +123,7 @@ contract CommerceRegistryTest is Test {
                 token: token,
                 facilitator: facilitator,
                 amount: 1e6,
+                paymentRail: CommerceRegistry.PaymentRail.X402,
                 expiresAt: block.timestamp + 1 hours,
                 paymentNonce: 1,
                 resourceHash: keccak256("resource"),

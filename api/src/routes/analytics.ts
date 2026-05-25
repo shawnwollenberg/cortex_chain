@@ -15,6 +15,8 @@ export function createAnalyticsRouter(pool: pg.Pool): Router {
         topMerchants,
         topServices,
         facilitatorVolume,
+        volumeByPaymentRail,
+        trustSignalsByKind,
       ] = await Promise.all([
         pool.query(`
           SELECT
@@ -97,6 +99,24 @@ export function createAnalyticsRouter(pool: pg.Pool): Router {
           ORDER BY SUM(amount) DESC
           LIMIT 20
         `),
+        pool.query(`
+          SELECT
+            payment_rail,
+            COUNT(*) AS receipts,
+            COALESCE(SUM(amount), 0) AS settled_volume,
+            COALESCE(SUM(protocol_fee_amount), 0) AS protocol_fees
+          FROM commerce_receipts
+          GROUP BY payment_rail
+          ORDER BY SUM(amount) DESC
+        `),
+        pool.query(`
+          SELECT
+            kind,
+            COUNT(*) AS signals
+          FROM trust_signals
+          GROUP BY kind
+          ORDER BY kind
+        `),
       ]);
 
       res.json({
@@ -110,6 +130,8 @@ export function createAnalyticsRouter(pool: pg.Pool): Router {
         top_merchants: topMerchants.rows,
         top_services: topServices.rows,
         facilitator_volume: facilitatorVolume.rows,
+        volume_by_payment_rail: volumeByPaymentRail.rows,
+        trust_signals_by_kind: trustSignalsByKind.rows,
       });
     } catch (err) {
       next(err);

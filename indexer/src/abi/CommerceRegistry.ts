@@ -78,6 +78,7 @@ export const CommerceRegistryABI = [
       { name: "token", type: "address", indexed: false },
       { name: "facilitator", type: "address", indexed: false },
       { name: "amount", type: "uint256", indexed: false },
+      { name: "paymentRail", type: "uint8", indexed: false },
       { name: "protocolFeeBps", type: "uint16", indexed: false },
       { name: "protocolFeeAmount", type: "uint256", indexed: false },
       { name: "expiresAt", type: "uint256", indexed: false },
@@ -98,11 +99,21 @@ export const CommerceRegistryABI = [
       { name: "serviceNumericId", type: "uint256", indexed: false },
       { name: "token", type: "address", indexed: false },
       { name: "amount", type: "uint256", indexed: false },
+      { name: "paymentRail", type: "uint8", indexed: false },
       { name: "protocolFeeBps", type: "uint16", indexed: false },
       { name: "protocolFeeAmount", type: "uint256", indexed: false },
       { name: "facilitator", type: "address", indexed: false },
       { name: "resultHash", type: "bytes32", indexed: false },
       { name: "resourceHash", type: "bytes32", indexed: false },
+      { name: "fulfillmentHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "FulfillmentRecorded",
+    inputs: [
+      { name: "receiptId", type: "uint256", indexed: true },
+      { name: "fulfillmentHash", type: "bytes32", indexed: false },
     ],
   },
   {
@@ -122,6 +133,18 @@ export const CommerceRegistryABI = [
       { name: "disputeId", type: "uint256", indexed: true },
       { name: "status", type: "uint8", indexed: false },
       { name: "resolutionHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "TrustSignalRecorded",
+    inputs: [
+      { name: "signalId", type: "uint256", indexed: true },
+      { name: "subjectType", type: "uint8", indexed: true },
+      { name: "subjectId", type: "uint256", indexed: true },
+      { name: "kind", type: "uint8", indexed: false },
+      { name: "reporter", type: "address", indexed: false },
+      { name: "signalHash", type: "bytes32", indexed: false },
     ],
   },
 ] as const satisfies Abi;

@@ -8,6 +8,27 @@ contract CommerceRegistry {
         REJECTED
     }
 
+    enum PaymentRail {
+        TRANSFER,
+        SWAP,
+        FACILITATOR,
+        X402
+    }
+
+    enum SignalSubject {
+        MERCHANT,
+        SERVICE,
+        FACILITATOR,
+        AGENT
+    }
+
+    enum SignalKind {
+        VERIFICATION,
+        RISK,
+        COMPLIANCE,
+        FULFILLMENT
+    }
+
     struct Merchant {
         address owner;
         address payoutAddress;
@@ -39,6 +60,7 @@ contract CommerceRegistry {
         address token;
         address facilitator;
         uint256 amount;
+        PaymentRail paymentRail;
         uint16 protocolFeeBps;
         uint256 protocolFeeAmount;
         uint256 expiresAt;
@@ -56,11 +78,13 @@ contract CommerceRegistry {
         uint256 serviceNumericId;
         address token;
         uint256 amount;
+        PaymentRail paymentRail;
         uint16 protocolFeeBps;
         uint256 protocolFeeAmount;
         address facilitator;
         bytes32 resultHash;
         bytes32 resourceHash;
+        bytes32 fulfillmentHash;
     }
 
     struct Dispute {
@@ -71,6 +95,14 @@ contract CommerceRegistry {
         bytes32 resolutionHash;
     }
 
+    struct TrustSignal {
+        SignalSubject subjectType;
+        uint256 subjectId;
+        SignalKind kind;
+        address reporter;
+        bytes32 signalHash;
+    }
+
     struct QuoteCommitment {
         uint256 merchantId;
         uint256 serviceNumericId;
@@ -78,6 +110,7 @@ contract CommerceRegistry {
         address token;
         address facilitator;
         uint256 amount;
+        PaymentRail paymentRail;
         uint256 expiresAt;
         uint256 paymentNonce;
         bytes32 resourceHash;
@@ -90,6 +123,7 @@ contract CommerceRegistry {
     uint256 private _nextFacilitatorId = 1;
     uint256 private _nextReceiptId = 1;
     uint256 private _nextDisputeId = 1;
+    uint256 private _nextSignalId = 1;
 
     uint16 public constant PROTOCOL_FEE_BPS = 0;
 
@@ -100,6 +134,7 @@ contract CommerceRegistry {
     mapping(bytes32 => Quote) private _quotes;
     mapping(uint256 => Receipt) private _receipts;
     mapping(uint256 => Dispute) private _disputes;
+    mapping(uint256 => TrustSignal) private _trustSignals;
 
     event MerchantRegistered(
         uint256 indexed merchantId,
@@ -151,6 +186,7 @@ contract CommerceRegistry {
         address token,
         address facilitator,
         uint256 amount,
+        PaymentRail paymentRail,
         uint16 protocolFeeBps,
         uint256 protocolFeeAmount,
         uint256 expiresAt,
@@ -167,14 +203,25 @@ contract CommerceRegistry {
         uint256 serviceNumericId,
         address token,
         uint256 amount,
+        PaymentRail paymentRail,
         uint16 protocolFeeBps,
         uint256 protocolFeeAmount,
         address facilitator,
         bytes32 resultHash,
-        bytes32 resourceHash
+        bytes32 resourceHash,
+        bytes32 fulfillmentHash
     );
+    event FulfillmentRecorded(uint256 indexed receiptId, bytes32 fulfillmentHash);
     event DisputeOpened(uint256 indexed disputeId, uint256 indexed receiptId, address indexed opener, bytes32 reasonHash);
     event DisputeResolved(uint256 indexed disputeId, DisputeStatus status, bytes32 resolutionHash);
+    event TrustSignalRecorded(
+        uint256 indexed signalId,
+        SignalSubject indexed subjectType,
+        uint256 indexed subjectId,
+        SignalKind kind,
+        address reporter,
+        bytes32 signalHash
+    );
 
     error Unauthorized();
     error MerchantNotFound();
@@ -304,6 +351,7 @@ contract CommerceRegistry {
             token: commitment.token,
             facilitator: commitment.facilitator,
             amount: commitment.amount,
+            paymentRail: commitment.paymentRail,
             protocolFeeBps: PROTOCOL_FEE_BPS,
             protocolFeeAmount: _protocolFeeAmount(commitment.amount),
             expiresAt: commitment.expiresAt,
@@ -332,11 +380,13 @@ contract CommerceRegistry {
             serviceNumericId: quote.serviceNumericId,
             token: quote.token,
             amount: quote.amount,
+            paymentRail: quote.paymentRail,
             protocolFeeBps: quote.protocolFeeBps,
             protocolFeeAmount: quote.protocolFeeAmount,
             facilitator: quote.facilitator,
             resultHash: resultHash,
-            resourceHash: quote.resourceHash
+            resourceHash: quote.resourceHash,
+            fulfillmentHash: bytes32(0)
         });
         emit ReceiptRecorded(
             receiptId,
@@ -346,12 +396,23 @@ contract CommerceRegistry {
             quote.serviceNumericId,
             quote.token,
             quote.amount,
+            quote.paymentRail,
             quote.protocolFeeBps,
             quote.protocolFeeAmount,
             quote.facilitator,
             resultHash,
-            quote.resourceHash
+            quote.resourceHash,
+            bytes32(0)
         );
+    }
+
+    function recordFulfillment(uint256 receiptId, bytes32 fulfillmentHash) external {
+        Receipt storage receipt = _receipt(receiptId);
+        Merchant storage merchant = _merchant(receipt.merchantId);
+        if (msg.sender != merchant.owner && msg.sender != receipt.facilitator) revert Unauthorized();
+
+        receipt.fulfillmentHash = fulfillmentHash;
+        emit FulfillmentRecorded(receiptId, fulfillmentHash);
     }
 
     function openDispute(uint256 receiptId, bytes32 reasonHash) external returns (uint256 disputeId) {
@@ -385,6 +446,23 @@ contract CommerceRegistry {
         emit DisputeResolved(disputeId, status, resolutionHash);
     }
 
+    function recordTrustSignal(
+        SignalSubject subjectType,
+        uint256 subjectId,
+        SignalKind kind,
+        bytes32 signalHash
+    ) external returns (uint256 signalId) {
+        signalId = _nextSignalId++;
+        _trustSignals[signalId] = TrustSignal({
+            subjectType: subjectType,
+            subjectId: subjectId,
+            kind: kind,
+            reporter: msg.sender,
+            signalHash: signalHash
+        });
+        emit TrustSignalRecorded(signalId, subjectType, subjectId, kind, msg.sender, signalHash);
+    }
+
     function getMerchant(uint256 merchantId) external view returns (Merchant memory) {
         return _merchant(merchantId);
     }
@@ -413,6 +491,10 @@ contract CommerceRegistry {
         return dispute;
     }
 
+    function getTrustSignal(uint256 signalId) external view returns (TrustSignal memory) {
+        return _trustSignals[signalId];
+    }
+
     function computeQuoteHash(QuoteCommitment calldata commitment) external view returns (bytes32) {
         return _computeQuoteHash(commitment);
     }
@@ -424,6 +506,7 @@ contract CommerceRegistry {
         address token,
         address facilitator,
         uint256 amount,
+        PaymentRail paymentRail,
         uint256 expiresAt,
         uint256 paymentNonce,
         bytes32 resourceHash,
@@ -438,6 +521,7 @@ contract CommerceRegistry {
                 token: token,
                 facilitator: facilitator,
                 amount: amount,
+                paymentRail: paymentRail,
                 expiresAt: expiresAt,
                 paymentNonce: paymentNonce,
                 resourceHash: resourceHash,
@@ -478,6 +562,7 @@ contract CommerceRegistry {
                 commitment.token,
                 commitment.facilitator,
                 commitment.amount,
+                commitment.paymentRail,
                 commitment.expiresAt,
                 commitment.paymentNonce,
                 commitment.x402PayloadHash
@@ -499,6 +584,7 @@ contract CommerceRegistry {
             quote.token,
             quote.facilitator,
             quote.amount,
+            quote.paymentRail,
             quote.protocolFeeBps,
             quote.protocolFeeAmount,
             quote.expiresAt,

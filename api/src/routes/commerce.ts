@@ -6,6 +6,10 @@ function isBytes32(value: string): boolean {
   return /^0x[0-9a-fA-F]{64}$/.test(value);
 }
 
+function isEnumNumber(value: string, max: number): boolean {
+  return /^\d+$/.test(value) && Number(value) <= max;
+}
+
 export function createCommerceRouter(pool: pg.Pool): Router {
   const router = Router();
 
@@ -58,6 +62,61 @@ export function createCommerceRouter(pool: pg.Pool): Router {
         return;
       }
       res.json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/merchants/:id/reputation", async (req, res, next) => {
+    try {
+      if (!isValidId(req.params.id)) {
+        res.status(400).json({ error: "Invalid merchant ID" });
+        return;
+      }
+
+      const merchant = await pool.query("SELECT * FROM merchants WHERE merchant_id = $1", [req.params.id]);
+      if (merchant.rows.length === 0) {
+        res.status(404).json({ error: "Merchant not found" });
+        return;
+      }
+
+      const [commerce, disputes, signals] = await Promise.all([
+        pool.query(
+          `SELECT
+            COUNT(*) AS receipts,
+            COALESCE(SUM(amount), 0) AS settled_volume,
+            COUNT(*) FILTER (WHERE fulfillment_hash <> '') AS fulfilled_receipts
+           FROM commerce_receipts
+           WHERE merchant_id = $1`,
+          [req.params.id],
+        ),
+        pool.query(
+          `SELECT
+            COUNT(*) AS disputes,
+            COUNT(*) FILTER (WHERE d.status = 'OPEN') AS open_disputes,
+            COUNT(*) FILTER (WHERE d.status = 'RESOLVED') AS resolved_disputes,
+            COUNT(*) FILTER (WHERE d.status = 'REJECTED') AS rejected_disputes
+           FROM disputes d
+           INNER JOIN commerce_receipts r ON r.receipt_id = d.receipt_id
+           WHERE r.merchant_id = $1`,
+          [req.params.id],
+        ),
+        pool.query(
+          `SELECT kind, COUNT(*) AS signals
+           FROM trust_signals
+           WHERE subject_type = 0 AND subject_id = $1
+           GROUP BY kind
+           ORDER BY kind`,
+          [req.params.id],
+        ),
+      ]);
+
+      res.json({
+        merchant: merchant.rows[0],
+        commerce: commerce.rows[0],
+        disputes: disputes.rows[0],
+        trust_signals_by_kind: signals.rows,
+      });
     } catch (err) {
       next(err);
     }
@@ -228,6 +287,63 @@ export function createCommerceRouter(pool: pg.Pool): Router {
         params,
       );
       res.json({ disputes: result.rows, pagination: { limit, offset, count: result.rows.length } });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/trust-signals", async (req, res, next) => {
+    try {
+      const subjectType = req.query.subject_type as string | undefined;
+      const subjectId = req.query.subject_id as string | undefined;
+      const kind = req.query.kind as string | undefined;
+      const reporter = req.query.reporter as string | undefined;
+      const { limit, offset } = parsePagination(req.query);
+
+      if (subjectType !== undefined && !isEnumNumber(subjectType, 3)) {
+        res.status(400).json({ error: "Invalid subject_type" });
+        return;
+      }
+      if (subjectId !== undefined && !isValidId(subjectId)) {
+        res.status(400).json({ error: "Invalid subject_id" });
+        return;
+      }
+      if (kind !== undefined && !isEnumNumber(kind, 3)) {
+        res.status(400).json({ error: "Invalid kind" });
+        return;
+      }
+      if (reporter !== undefined && !isValidAddress(reporter)) {
+        res.status(400).json({ error: "Invalid reporter address" });
+        return;
+      }
+
+      const conditions: string[] = [];
+      const params: unknown[] = [];
+      let i = 1;
+      if (subjectType !== undefined) {
+        conditions.push(`subject_type = $${i++}`);
+        params.push(Number(subjectType));
+      }
+      if (subjectId !== undefined) {
+        conditions.push(`subject_id = $${i++}`);
+        params.push(subjectId);
+      }
+      if (kind !== undefined) {
+        conditions.push(`kind = $${i++}`);
+        params.push(Number(kind));
+      }
+      if (reporter !== undefined) {
+        conditions.push(`reporter = $${i++}`);
+        params.push(reporter.toLowerCase());
+      }
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+      params.push(limit, offset);
+
+      const result = await pool.query(
+        `SELECT * FROM trust_signals ${where} ORDER BY signal_id DESC LIMIT $${i++} OFFSET $${i}`,
+        params,
+      );
+      res.json({ trust_signals: result.rows, pagination: { limit, offset, count: result.rows.length } });
     } catch (err) {
       next(err);
     }

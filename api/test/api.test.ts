@@ -94,24 +94,24 @@ async function seedTestData(pool: pg.Pool): Promise<void> {
   await pool.query(`
     INSERT INTO quotes
       (quote_hash, merchant_id, service_numeric_id, agent, token, facilitator, amount, protocol_fee_bps,
-       protocol_fee_amount, expires_at, payment_nonce, resource_hash, terms_hash, x402_payload_hash, settled,
+       protocol_fee_amount, payment_rail, expires_at, payment_nonce, resource_hash, terms_hash, x402_payload_hash, settled,
        block_number)
     VALUES
       ($1, 1, 1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '0x1111111111111111111111111111111111111111',
-       '0xcccccccccccccccccccccccccccccccccccccccc', 1000000, 0, 0, 9999999999, 1, $2, $3, $4, true, 703)
+       '0xcccccccccccccccccccccccccccccccccccccccc', 1000000, 0, 0, 3, 9999999999, 1, $2, $3, $4, true, 703)
     ON CONFLICT DO NOTHING
   `, [`0x${"11".repeat(32)}`, `0x${"22".repeat(32)}`, `0x${"33".repeat(32)}`, `0x${"44".repeat(32)}`]);
 
   await pool.query(`
     INSERT INTO commerce_receipts
       (receipt_id, quote_hash, agent, merchant_id, service_numeric_id, token, amount, protocol_fee_bps,
-       protocol_fee_amount, facilitator, result_hash, resource_hash, block_number)
+       protocol_fee_amount, payment_rail, facilitator, result_hash, resource_hash, fulfillment_hash, block_number)
     VALUES
       (1, $1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 1,
        '0x1111111111111111111111111111111111111111', 1000000, 0, 0,
-       '0xcccccccccccccccccccccccccccccccccccccccc', $2, $3, 704)
+       3, '0xcccccccccccccccccccccccccccccccccccccccc', $2, $3, $4, 704)
     ON CONFLICT DO NOTHING
-  `, [`0x${"11".repeat(32)}`, `0x${"55".repeat(32)}`, `0x${"22".repeat(32)}`]);
+  `, [`0x${"11".repeat(32)}`, `0x${"55".repeat(32)}`, `0x${"22".repeat(32)}`, `0x${"88".repeat(32)}`]);
 
   await pool.query(`
     INSERT INTO disputes (dispute_id, receipt_id, opener, reason_hash, status, resolution_hash, block_number)
@@ -119,6 +119,14 @@ async function seedTestData(pool: pg.Pool): Promise<void> {
       (1, 1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $1, 'RESOLVED', $2, 705)
     ON CONFLICT DO NOTHING
   `, [`0x${"66".repeat(32)}`, `0x${"77".repeat(32)}`]);
+
+  await pool.query(`
+    INSERT INTO trust_signals (signal_id, subject_type, subject_id, kind, reporter, signal_hash, block_number)
+    VALUES
+      (1, 0, 1, 0, '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', $1, 706),
+      (2, 0, 1, 1, '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $2, 707)
+    ON CONFLICT DO NOTHING
+  `, [`0x${"89".repeat(32)}`, `0x${"90".repeat(32)}`]);
 }
 
 beforeAll(async () => {
@@ -416,6 +424,27 @@ describe("Participants", () => {
   });
 });
 
+describe("Commerce", () => {
+  it("GET /commerce/merchants/1/reputation returns receipts, disputes, and trust signals", async () => {
+    const res = await fetch(`${baseUrl}/merchants/1/reputation`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.merchant.merchant_id).toBe("1");
+    expect(body.commerce.receipts).toBe("1");
+    expect(body.commerce.fulfilled_receipts).toBe("1");
+    expect(body.disputes.resolved_disputes).toBe("1");
+    expect(body.trust_signals_by_kind).toHaveLength(2);
+  });
+
+  it("GET /commerce/trust-signals returns filtered trust signals", async () => {
+    const res = await fetch(`${baseUrl}/trust-signals?subject_type=0&subject_id=1&kind=0`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.trust_signals).toHaveLength(1);
+    expect(body.trust_signals[0].reporter).toBe("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+  });
+});
+
 describe("Analytics", () => {
   it("GET /analytics/commerce returns commerce volume and fee metrics", async () => {
     const res = await fetch(`${baseUrl}/analytics/commerce`);
@@ -427,8 +456,10 @@ describe("Analytics", () => {
     expect(body.summary.settled_protocol_fees).toBe("0");
     expect(body.summary.resolved_disputes).toBe("1");
     expect(body.volume_by_token[0].token).toBe("0x1111111111111111111111111111111111111111");
+    expect(body.volume_by_payment_rail[0].payment_rail).toBe(3);
     expect(body.top_merchants[0].merchant_id).toBe("1");
     expect(body.facilitator_volume[0].facilitator).toBe("0xcccccccccccccccccccccccccccccccccccccccc");
+    expect(body.trust_signals_by_kind).toHaveLength(2);
   });
 });
 

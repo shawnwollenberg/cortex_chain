@@ -247,6 +247,7 @@ struct QuoteCommitment {
     address token;
     address facilitator;
     uint256 amount;
+    PaymentRail paymentRail;
     uint256 expiresAt;
     uint256 paymentNonce;
     bytes32 resourceHash;
@@ -269,6 +270,8 @@ struct QuoteCommitment {
 | `updateFacilitator(facilitatorId, metadataURI, metadataHash, active)` | Facilitator address | Update facilitator metadata and active status. |
 | `commitQuote(commitment)` | Merchant owner | Commit a canonical quote hash. Requires active facilitator. |
 | `recordReceipt(quoteHash, resultHash)` | Quote facilitator | Mark quote settled and emit receipt. |
+| `recordFulfillment(receiptId, fulfillmentHash)` | Merchant owner or facilitator | Attach a fulfillment attestation hash to a receipt. |
+| `recordTrustSignal(subjectType, subjectId, kind, signalHash)` | Anyone | Record verification, risk, compliance, or fulfillment signal metadata. |
 | `openDispute(receiptId, reasonHash)` | Agent, merchant, or facilitator | Open a receipt-linked dispute. |
 | `resolveDispute(disputeId, status, resolutionHash)` | Merchant or facilitator | Resolve or reject an open dispute. |
 | `computeQuoteHash(...)` | View | Compute the canonical quote hash. |
@@ -280,8 +283,10 @@ struct QuoteCommitment {
 event MerchantRegistered(uint256 indexed merchantId, address indexed owner, address indexed payoutAddress, string metadataURI, bytes32 metadataHash);
 event ServiceRegistered(uint256 indexed serviceNumericId, uint256 indexed merchantId, string serviceId, string metadataURI, bytes32 metadataHash, bytes32 capabilityHash);
 event FacilitatorRegistered(uint256 indexed facilitatorId, address indexed facilitator, string metadataURI, bytes32 metadataHash);
-event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash);
-event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash);
+event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, PaymentRail paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash);
+event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, PaymentRail paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash, bytes32 fulfillmentHash);
+event FulfillmentRecorded(uint256 indexed receiptId, bytes32 fulfillmentHash);
+event TrustSignalRecorded(uint256 indexed signalId, SignalSubject indexed subjectType, uint256 indexed subjectId, SignalKind kind, address reporter, bytes32 signalHash);
 event DisputeOpened(uint256 indexed disputeId, uint256 indexed receiptId, address indexed opener, bytes32 reasonHash);
 event DisputeResolved(uint256 indexed disputeId, DisputeStatus status, bytes32 resolutionHash);
 ```

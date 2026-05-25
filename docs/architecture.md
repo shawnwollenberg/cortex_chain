@@ -29,6 +29,8 @@ CommerceRegistry
   | facilitators
   | quote commitments
   | receipts
+  | fulfillment attestations
+  | trust signals
   | disputes
   | zero-fee protocol instrumentation
 
@@ -64,8 +66,10 @@ Indexer -> Postgres -> REST API / MCP / Dashboard
 3. Agent checks service state and account policy before accepting terms.
 4. Merchant commits a quote binding merchant, service, agent, token, facilitator/payment rail, amount, expiry, payment nonce, resource hash, terms hash, optional x402 payload hash, and protocol fee terms.
 5. Payment can happen through wallet-to-wallet transfer, ERC-20 transfer, swap, facilitator-mediated settlement, or x402.
-6. Receipt records settlement and result/resource hashes.
-7. Disputes can be opened and resolved against receipts, creating reputation and risk signals for both agents and merchants.
+6. Receipt records settlement, payment rail, result/resource hashes, and optional fulfillment hash.
+7. Merchants or facilitators can add fulfillment attestations to receipts.
+8. Any participant can record verification, risk, compliance, or fulfillment trust signals for merchants, services, facilitators, and agents.
+9. Disputes can be opened and resolved against receipts, creating reputation and risk signals for both agents and merchants.
 
 ## Payment Rails
 
@@ -87,7 +91,7 @@ Cortex is not x402-only.
 | `SolverRegistry` | Solver discovery | Operator metadata, bond, fill quality counters |
 | `AttestorRegistry` | Attestor discovery | Operator metadata and schema support |
 | `AttestationRegistry` | Provenance | Schema-based attestations and revocation |
-| `CommerceRegistry` | Agentic commerce | Merchants, services, facilitators, quotes, receipts, disputes |
+| `CommerceRegistry` | Agentic commerce | Merchants, services, facilitators, quotes, receipts, fulfillment, trust signals, disputes |
 | `DemoTarget` | Local demo | Simple executable target for e2e testing |
 
 ## Indexed Data
@@ -106,8 +110,9 @@ Cortex is not x402-only.
 | `services` | Commerce registry events | Service discovery and capability lookup |
 | `facilitators` | Commerce registry events | Payment facilitator discovery |
 | `quotes` | Quote events | Canonical quote/payment terms and fee instrumentation |
-| `commerce_receipts` | Receipt events | Settled commerce records |
+| `commerce_receipts` | Receipt and fulfillment events | Settled commerce records and fulfillment hashes |
 | `disputes` | Dispute events | Refund/dispute/reputation signals |
+| `trust_signals` | Trust signal events | Verification, risk, compliance, and fulfillment signals |
 | `tx_receipts` | All decoded transactions | Human and machine transaction explanations |
 
 ## API, MCP, and Dashboard
@@ -115,7 +120,7 @@ Cortex is not x402-only.
 - REST API exposes indexed state for agents and frontends.
 - MCP tools expose selected API functionality to model-driven agents.
 - Dashboard reads `/analytics/commerce`, merchant/service discovery, receipts, and disputes.
-- Analytics include volume, settled volume, zero-fee protocol fee fields, dispute counts, and facilitator/merchant/service leaderboards.
+- Analytics include volume, settled volume, payment rail mix, zero-fee protocol fee fields, dispute counts, trust signal counts, and facilitator/merchant/service leaderboards.
 
 ## Deployment Shape
 

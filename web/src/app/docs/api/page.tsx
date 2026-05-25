@@ -125,6 +125,8 @@ export default function ApiPage() {
         <p><code>GET /quotes/:quoteHash</code> — get a canonical quote commitment.</p>
         <p><code>GET /receipts?agent=0x...&amp;merchant_id=1</code> — list settled receipts.</p>
         <p><code>GET /disputes?receipt_id=1</code> — list receipt-linked disputes.</p>
+        <p><code>GET /trust-signals?subject_type=0&amp;subject_id=1</code> — list trust and risk signals.</p>
+        <p><code>GET /merchants/:id/reputation</code> — get receipt, fulfillment, dispute, and trust summaries.</p>
       </div>
       <CodeBlock language="json">{`{
   "quote_hash": "0x...",
@@ -134,6 +136,7 @@ export default function ApiPage() {
   "token": "0x...",
   "facilitator": "0x...",
   "amount": "1000000000000000000",
+  "payment_rail": 3,
   "protocol_fee_bps": 0,
   "protocol_fee_amount": "0",
   "payment_nonce": "1",
@@ -162,7 +165,9 @@ export default function ApiPage() {
   "volume_by_token": [],
   "top_merchants": [],
   "top_services": [],
-  "facilitator_volume": []
+  "facilitator_volume": [],
+  "volume_by_payment_rail": [],
+  "trust_signals_by_kind": []
 }`}</CodeBlock>
 
       <hr className="border-border my-8" />

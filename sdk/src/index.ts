@@ -151,6 +151,55 @@ export interface PreflightRequest {
   data?: Hex;
 }
 
+export enum PaymentRail {
+  Transfer = 0,
+  Swap = 1,
+  Facilitator = 2,
+  X402 = 3,
+}
+
+export enum SignalSubject {
+  Merchant = 0,
+  Service = 1,
+  Facilitator = 2,
+  Agent = 3,
+}
+
+export enum SignalKind {
+  Verification = 0,
+  Risk = 1,
+  Compliance = 2,
+  Fulfillment = 3,
+}
+
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+}
+
+export interface MerchantQuery extends PaginationParams {
+  owner?: Address;
+  active?: boolean;
+}
+
+export interface ServiceQuery extends PaginationParams {
+  merchant_id?: string | bigint;
+  capability_hash?: Hex;
+  active?: boolean;
+}
+
+export interface ReceiptQuery extends PaginationParams {
+  agent?: Address;
+  merchant_id?: string | bigint;
+}
+
+export interface TrustSignalQuery extends PaginationParams {
+  subject_type?: SignalSubject | number;
+  subject_id?: string | bigint;
+  kind?: SignalKind | number;
+  reporter?: Address;
+}
+
 export interface CreateIntentRequest {
   intent: AgentIntent;
   metadata?: IntentMetadata;
@@ -296,9 +345,35 @@ export class AgentChainClient {
   }
 
   async listAttestationSchemas(): Promise<unknown> {
-    const res = await fetch(`${this.config.apiUrl}/attestations/schemas`);
-    if (!res.ok) throw new Error("GET /attestations/schemas failed");
-    return res.json();
+    return this.getJson("/attestations/schemas");
+  }
+
+  async listMerchants(query: MerchantQuery = {}): Promise<unknown> {
+    return this.getJson(`/merchants${toQueryString(query)}`);
+  }
+
+  async getMerchant(merchantId: string | bigint): Promise<unknown> {
+    return this.getJson(`/merchants/${merchantId}`);
+  }
+
+  async getMerchantReputation(merchantId: string | bigint): Promise<unknown> {
+    return this.getJson(`/merchants/${merchantId}/reputation`);
+  }
+
+  async listServices(query: ServiceQuery = {}): Promise<unknown> {
+    return this.getJson(`/services${toQueryString(query)}`);
+  }
+
+  async listReceipts(query: ReceiptQuery = {}): Promise<unknown> {
+    return this.getJson(`/receipts${toQueryString(query)}`);
+  }
+
+  async listTrustSignals(query: TrustSignalQuery = {}): Promise<unknown> {
+    return this.getJson(`/trust-signals${toQueryString(query)}`);
+  }
+
+  async getCommerceAnalytics(): Promise<unknown> {
+    return this.getJson("/analytics/commerce");
   }
 
   private async waitForIndexedIntent(intentId: bigint, timeoutMs: number): Promise<boolean> {
@@ -317,6 +392,16 @@ export class AgentChainClient {
 
   private async putJson(path: string, body: unknown): Promise<unknown> {
     return this.requestJson("PUT", path, body);
+  }
+
+  private async getJson(path: string): Promise<unknown> {
+    const res = await fetch(`${this.config.apiUrl}${path}`);
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      const error = isErrorPayload(payload) ? payload.error : `GET ${path} failed`;
+      throw new Error(error);
+    }
+    return payload;
   }
 
   private async requestJson(method: "POST" | "PUT", path: string, body: unknown): Promise<unknown> {
@@ -432,6 +517,16 @@ function bigintJsonReplacer(_key: string, value: unknown): unknown {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function toQueryString(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    search.set(key, typeof value === "bigint" ? value.toString() : String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
 }
 
 function executionFromMetadata(metadata?: IntentMetadata): ExecutionRequirements {

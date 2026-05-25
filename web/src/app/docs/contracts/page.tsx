@@ -187,7 +187,7 @@ event AttestorRegistered(uint256 indexed attestorId, address indexed operator, s
 
       <h2 className="text-2xl font-semibold mb-4" id="commerce-registry">CommerceRegistry</h2>
       <p className="text-sm text-muted mb-6">
-        Registers merchants, services, payment facilitators, canonical quote commitments, receipts, and disputes for agentic commerce.
+        Registers merchants, services, payment facilitators, canonical quote commitments, receipts, fulfillment, trust signals, and disputes for agentic commerce.
       </p>
       <h3 className="text-lg font-semibold mb-3">Quote Commitment</h3>
       <CodeBlock language="solidity">{`struct QuoteCommitment {
@@ -197,6 +197,7 @@ event AttestorRegistered(uint256 indexed attestorId, address indexed operator, s
     address token;
     address facilitator;
     uint256 amount;
+    PaymentRail paymentRail;
     uint256 expiresAt;
     uint256 paymentNonce;
     bytes32 resourceHash;
@@ -207,8 +208,10 @@ event AttestorRegistered(uint256 indexed attestorId, address indexed operator, s
         The quote hash binds chain ID, registry address, service terms, payment terms, and protocol fee terms. Basic transfers and swaps bind through policy and terms hashes; x402 flows additionally bind the x402 payload hash.
       </p>
       <h3 className="text-lg font-semibold mb-3">Events</h3>
-      <CodeBlock language="solidity">{`event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash);
-event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash);
+      <CodeBlock language="solidity">{`event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, PaymentRail paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash);
+event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, PaymentRail paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash, bytes32 fulfillmentHash);
+event FulfillmentRecorded(uint256 indexed receiptId, bytes32 fulfillmentHash);
+event TrustSignalRecorded(uint256 indexed signalId, SignalSubject indexed subjectType, uint256 indexed subjectId, SignalKind kind, address reporter, bytes32 signalHash);
 event DisputeOpened(uint256 indexed disputeId, uint256 indexed receiptId, address indexed opener, bytes32 reasonHash);
 event DisputeResolved(uint256 indexed disputeId, DisputeStatus status, bytes32 resolutionHash);`}</CodeBlock>
       <p className="text-sm text-muted mt-3">

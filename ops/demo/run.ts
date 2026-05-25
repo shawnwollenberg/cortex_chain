@@ -106,16 +106,20 @@ const CommerceRegistryABI = parseAbi([
   "function registerFacilitator(address facilitator, string metadataURI, bytes32 metadataHash) returns (uint256 facilitatorId)",
   "function registerMerchant(address payoutAddress, string metadataURI, bytes32 metadataHash) returns (uint256 merchantId)",
   "function registerService(uint256 merchantId, string serviceId, string metadataURI, bytes32 metadataHash, bytes32 capabilityHash) returns (uint256 serviceNumericId)",
-  "function computeQuoteHash(uint256 merchantId, uint256 serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash) view returns (bytes32)",
-  "function commitQuote((uint256 merchantId, uint256 serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash) commitment) returns (bytes32 quoteHash)",
+  "function computeQuoteHash(uint256 merchantId, uint256 serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint8 paymentRail, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash) view returns (bytes32)",
+  "function commitQuote((uint256 merchantId, uint256 serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint8 paymentRail, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash) commitment) returns (bytes32 quoteHash)",
   "function recordReceipt(bytes32 quoteHash, bytes32 resultHash) returns (uint256 receiptId)",
+  "function recordFulfillment(uint256 receiptId, bytes32 fulfillmentHash)",
+  "function recordTrustSignal(uint8 subjectType, uint256 subjectId, uint8 kind, bytes32 signalHash) returns (uint256 signalId)",
   "function openDispute(uint256 receiptId, bytes32 reasonHash) returns (uint256 disputeId)",
   "function resolveDispute(uint256 disputeId, uint8 status, bytes32 resolutionHash)",
   "event FacilitatorRegistered(uint256 indexed facilitatorId, address indexed facilitator, string metadataURI, bytes32 metadataHash)",
   "event MerchantRegistered(uint256 indexed merchantId, address indexed owner, address indexed payoutAddress, string metadataURI, bytes32 metadataHash)",
   "event ServiceRegistered(uint256 indexed serviceNumericId, uint256 indexed merchantId, string serviceId, string metadataURI, bytes32 metadataHash, bytes32 capabilityHash)",
-  "event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash)",
-  "event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash)",
+  "event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, uint8 paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash)",
+  "event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, uint8 paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash, bytes32 fulfillmentHash)",
+  "event FulfillmentRecorded(uint256 indexed receiptId, bytes32 fulfillmentHash)",
+  "event TrustSignalRecorded(uint256 indexed signalId, uint8 indexed subjectType, uint256 indexed subjectId, uint8 kind, address reporter, bytes32 signalHash)",
   "event DisputeOpened(uint256 indexed disputeId, uint256 indexed receiptId, address indexed opener, bytes32 reasonHash)",
 ]);
 
@@ -527,6 +531,7 @@ async function main() {
   const x402PayloadHash = "0x" + "90".repeat(32) as Hex;
   const quoteExpiresAt = BigInt(Math.floor(Date.now() / 1000) + 3600);
   const paymentNonce = 1n;
+  const paymentRail = 3;
   const quoteHash = await publicClient.readContract({
     address: COMMERCE_REGISTRY,
     abi: CommerceRegistryABI,
@@ -538,6 +543,7 @@ async function main() {
       INPUT_TOKEN,
       solverAccount.address,
       1n * 10n ** 18n,
+      paymentRail,
       quoteExpiresAt,
       paymentNonce,
       resourceHash,
@@ -558,6 +564,7 @@ async function main() {
         token: INPUT_TOKEN,
         facilitator: solverAccount.address,
         amount: 1n * 10n ** 18n,
+        paymentRail,
         expiresAt: quoteExpiresAt,
         paymentNonce,
         resourceHash,
@@ -577,6 +584,31 @@ async function main() {
   const commerceReceipt = await waitReceipt(publicClient, receiptTx);
   const commerceReceiptId = BigInt(commerceReceipt.logs[0].topics[1]!);
 
+  const fulfillmentHash = "0x" + "79".repeat(32) as Hex;
+  const fulfillmentTx = await walletClient.writeContract({
+    address: COMMERCE_REGISTRY,
+    abi: CommerceRegistryABI,
+    functionName: "recordFulfillment",
+    args: [commerceReceiptId, fulfillmentHash],
+  });
+  await waitReceipt(publicClient, fulfillmentTx);
+
+  const verificationSignalTx = await walletClient.writeContract({
+    address: COMMERCE_REGISTRY,
+    abi: CommerceRegistryABI,
+    functionName: "recordTrustSignal",
+    args: [0, merchantId, 0, "0x" + "91".repeat(32) as Hex],
+  });
+  await waitReceipt(publicClient, verificationSignalTx);
+
+  const fulfillmentSignalTx = await solverWalletClient.writeContract({
+    address: COMMERCE_REGISTRY,
+    abi: CommerceRegistryABI,
+    functionName: "recordTrustSignal",
+    args: [1, serviceNumericId, 3, "0x" + "92".repeat(32) as Hex],
+  });
+  await waitReceipt(publicClient, fulfillmentSignalTx);
+
   const disputeTx = await walletClient.writeContract({
     address: COMMERCE_REGISTRY,
     abi: CommerceRegistryABI,
@@ -595,6 +627,8 @@ async function main() {
   await waitReceipt(publicClient, resolveDisputeTx);
   console.log(`  Quote:   ${quoteHash} (tx: ${quoteHashTx})`);
   console.log(`  Receipt: ${commerceReceiptId} (tx: ${receiptTx})`);
+  console.log(`  Fulfillment hash recorded (tx: ${fulfillmentTx})`);
+  console.log(`  Trust signals recorded (txs: ${verificationSignalTx}, ${fulfillmentSignalTx})`);
   console.log(`  Dispute: ${disputeId} resolved (tx: ${resolveDisputeTx})`);
 
   // -----------------------------------------------------------------------
@@ -673,6 +707,18 @@ async function main() {
   console.log(`\n  GET /disputes?receipt_id=${commerceReceiptId}`);
   const disputeData = await apiGet(`/disputes?receipt_id=${commerceReceiptId}`);
   console.log(`  Response: ${JSON.stringify(disputeData, null, 2)}`);
+
+  console.log(`\n  GET /trust-signals?subject_type=0&subject_id=${merchantId}`);
+  const trustSignals = await apiGet(`/trust-signals?subject_type=0&subject_id=${merchantId}`);
+  console.log(`  Response: ${JSON.stringify(trustSignals, null, 2)}`);
+
+  console.log(`\n  GET /merchants/${merchantId}/reputation`);
+  const reputationData = await apiGet(`/merchants/${merchantId}/reputation`);
+  console.log(`  Response: ${JSON.stringify(reputationData, null, 2)}`);
+
+  console.log(`\n  GET /analytics/commerce`);
+  const commerceAnalytics = await apiGet("/analytics/commerce");
+  console.log(`  Response: ${JSON.stringify(commerceAnalytics, null, 2)}`);
 
   // GET /intents?status=open
   console.log(`\n  GET /intents?status=${filled ? "filled" : "open"}`);

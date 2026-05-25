@@ -93,6 +93,7 @@ export async function handleCommerceRegistryLog(pool: pg.Pool, log: Log): Promis
         token,
         facilitator,
         amount,
+        paymentRail,
         protocolFeeBps,
         protocolFeeAmount,
         expiresAt,
@@ -104,14 +105,14 @@ export async function handleCommerceRegistryLog(pool: pg.Pool, log: Log): Promis
       await pool.query(
         `INSERT INTO quotes
           (quote_hash, merchant_id, service_numeric_id, agent, token, facilitator, amount, expires_at,
-           payment_nonce, resource_hash, terms_hash, x402_payload_hash, protocol_fee_bps, protocol_fee_amount,
-           block_number)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+           payment_nonce, resource_hash, terms_hash, x402_payload_hash, payment_rail, protocol_fee_bps,
+           protocol_fee_amount, block_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (quote_hash) DO UPDATE SET
           merchant_id = $2, service_numeric_id = $3, agent = $4, token = $5, facilitator = $6,
           amount = $7, expires_at = $8, payment_nonce = $9, resource_hash = $10, terms_hash = $11,
-          x402_payload_hash = $12, protocol_fee_bps = $13, protocol_fee_amount = $14,
-          block_number = $15, updated_at = now()`,
+          x402_payload_hash = $12, payment_rail = $13, protocol_fee_bps = $14,
+          protocol_fee_amount = $15, block_number = $16, updated_at = now()`,
         [
           quoteHash,
           merchantId.toString(),
@@ -125,6 +126,7 @@ export async function handleCommerceRegistryLog(pool: pg.Pool, log: Log): Promis
           resourceHash,
           termsHash,
           x402PayloadHash,
+          Number(paymentRail),
           protocolFeeBps,
           protocolFeeAmount.toString(),
           Number(log.blockNumber),
@@ -142,21 +144,25 @@ export async function handleCommerceRegistryLog(pool: pg.Pool, log: Log): Promis
         serviceNumericId,
         token,
         amount,
+        paymentRail,
         protocolFeeBps,
         protocolFeeAmount,
         facilitator,
         resultHash,
         resourceHash,
+        fulfillmentHash,
       } = decoded.args;
       await pool.query(
         `INSERT INTO commerce_receipts
           (receipt_id, quote_hash, agent, merchant_id, service_numeric_id, token, amount, facilitator,
-           result_hash, resource_hash, protocol_fee_bps, protocol_fee_amount, block_number)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           result_hash, resource_hash, fulfillment_hash, payment_rail, protocol_fee_bps, protocol_fee_amount,
+           block_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          ON CONFLICT (receipt_id) DO UPDATE SET
           quote_hash = $2, agent = $3, merchant_id = $4, service_numeric_id = $5, token = $6,
           amount = $7, facilitator = $8, result_hash = $9, resource_hash = $10,
-          protocol_fee_bps = $11, protocol_fee_amount = $12, block_number = $13`,
+          fulfillment_hash = $11, payment_rail = $12, protocol_fee_bps = $13,
+          protocol_fee_amount = $14, block_number = $15`,
         [
           receiptId.toString(),
           quoteHash,
@@ -168,6 +174,8 @@ export async function handleCommerceRegistryLog(pool: pg.Pool, log: Log): Promis
           facilitator.toLowerCase(),
           resultHash,
           resourceHash,
+          fulfillmentHash,
+          Number(paymentRail),
           protocolFeeBps,
           protocolFeeAmount.toString(),
           Number(log.blockNumber),
@@ -175,6 +183,37 @@ export async function handleCommerceRegistryLog(pool: pg.Pool, log: Log): Promis
       );
       await pool.query("UPDATE quotes SET settled = true, updated_at = now() WHERE quote_hash = $1", [quoteHash]);
       logger.info(`Indexed ReceiptRecorded: receiptId=${receiptId}`);
+      break;
+    }
+    case "FulfillmentRecorded": {
+      const { receiptId, fulfillmentHash } = decoded.args;
+      await pool.query(
+        `UPDATE commerce_receipts SET fulfillment_hash = $1, block_number = $2 WHERE receipt_id = $3`,
+        [fulfillmentHash, Number(log.blockNumber), receiptId.toString()],
+      );
+      logger.info(`Indexed FulfillmentRecorded: receiptId=${receiptId}`);
+      break;
+    }
+    case "TrustSignalRecorded": {
+      const { signalId, subjectType, subjectId, kind, reporter, signalHash } = decoded.args;
+      await pool.query(
+        `INSERT INTO trust_signals
+          (signal_id, subject_type, subject_id, kind, reporter, signal_hash, block_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (signal_id) DO UPDATE SET
+          subject_type = $2, subject_id = $3, kind = $4, reporter = $5, signal_hash = $6,
+          block_number = $7`,
+        [
+          signalId.toString(),
+          Number(subjectType),
+          subjectId.toString(),
+          Number(kind),
+          reporter.toLowerCase(),
+          signalHash,
+          Number(log.blockNumber),
+        ],
+      );
+      logger.info(`Indexed TrustSignalRecorded: signalId=${signalId}`);
       break;
     }
     case "DisputeOpened": {

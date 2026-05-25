@@ -15,7 +15,7 @@ const CONTRACTS = [
   ["SolverRegistry", "Solver discovery", "Operator metadata, bond, fill quality counters"],
   ["AttestorRegistry", "Attestor discovery", "Operator metadata and schema support"],
   ["AttestationRegistry", "Provenance", "Schema-based attestations and revocation"],
-  ["CommerceRegistry", "Agentic commerce", "Merchants, services, facilitators, quotes, receipts, disputes"],
+  ["CommerceRegistry", "Agentic commerce", "Merchants, services, facilitators, quotes, receipts, fulfillment, trust signals, disputes"],
 ];
 
 const TABLES = [
@@ -30,8 +30,9 @@ const TABLES = [
   ["services", "Service discovery and capability lookup"],
   ["facilitators", "Payment facilitator discovery"],
   ["quotes", "Canonical quote/payment terms and fee instrumentation"],
-  ["commerce_receipts", "Settled commerce records"],
+  ["commerce_receipts", "Settled commerce records and fulfillment hashes"],
   ["disputes", "Refund/dispute/reputation signals"],
+  ["trust_signals", "Verification, risk, compliance, and fulfillment signals"],
   ["tx_receipts", "Human and machine transaction explanations"],
 ];
 
@@ -52,7 +53,7 @@ export default function ArchitecturePage() {
 
 Merchant / Service Operator
   -> CommerceRegistry
-     merchants, services, facilitators, quotes, receipts, disputes
+     merchants, services, facilitators, quotes, receipts, fulfillment, trust signals, disputes
 
 Attestors
   -> AttestorRegistry + AttestationRegistry
@@ -66,7 +67,7 @@ All contract events
         <li><strong>Intent execution</strong> — sign an EIP-712 intent, inspect/select solver bids, and enforce selected solver, amounts, execution commitment, deadline, and optional attestations.</li>
         <li><strong>Merchant discovery</strong> — register merchant, service, facilitator, metadata URI/hash, and service capability hash onchain.</li>
         <li><strong>Quote commitment</strong> — bind merchant, service, agent, token, amount, payment rail, expiry, nonce, resource hash, terms hash, optional x402 payload hash, and fee terms.</li>
-        <li><strong>Receipt and dispute</strong> — record settlement, result/resource hashes, and dispute resolution signals for analytics and reputation.</li>
+        <li><strong>Receipt, fulfillment, and dispute</strong> — record settlement, result/resource hashes, fulfillment hashes, trust signals, and dispute resolution signals for analytics and reputation.</li>
         <li><strong>Index and query</strong> — index events into Postgres and expose them through REST, MCP, and dashboard views.</li>
       </ol>
 
@@ -132,7 +133,7 @@ All contract events
         <li>REST API exposes indexed state for agents and frontends.</li>
         <li>MCP tools expose selected API functionality to model-driven agents.</li>
         <li>Dashboard reads commerce analytics, merchant/service discovery, receipts, and disputes.</li>
-        <li>Analytics include volume, settled volume, zero-fee protocol fields, dispute counts, and facilitator/merchant/service leaderboards.</li>
+        <li>Analytics include volume, settled volume, payment rail mix, zero-fee protocol fields, dispute counts, trust signal counts, and facilitator/merchant/service leaderboards.</li>
       </ul>
 
       <h2 className="text-xl font-semibold mb-4">Technology Stack</h2>
