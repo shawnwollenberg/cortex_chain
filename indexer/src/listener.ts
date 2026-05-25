@@ -47,6 +47,8 @@ interface ContractConfig {
   name: string;
 }
 
+const MAX_LOG_BLOCK_RANGE = 1_900n;
+
 export class EventPoller {
   private lastProcessedBlock: bigint;
   private contracts: ContractConfig[];
@@ -116,7 +118,11 @@ export class EventPoller {
       return 0;
     }
 
-    logger.debug(`Polling blocks ${fromBlock}–${currentBlock}`);
+    const toBlock = currentBlock - fromBlock + 1n > MAX_LOG_BLOCK_RANGE
+      ? fromBlock + MAX_LOG_BLOCK_RANGE - 1n
+      : currentBlock;
+
+    logger.debug(`Polling blocks ${fromBlock}–${toBlock}`);
 
     // Fetch logs from all 3 contracts in this block range
     const allLogs: Log[] = [];
@@ -124,7 +130,7 @@ export class EventPoller {
       const logs = await this.client.getLogs({
         address: contract.address,
         fromBlock,
-        toBlock: currentBlock,
+        toBlock,
       });
       allLogs.push(...logs);
     }
@@ -138,7 +144,7 @@ export class EventPoller {
     });
 
     if (allLogs.length > 0) {
-      logger.info(`Found ${allLogs.length} event(s) in blocks ${fromBlock}–${currentBlock}`);
+      logger.info(`Found ${allLogs.length} event(s) in blocks ${fromBlock}–${toBlock}`);
     }
 
     // Route each log to the correct handler
@@ -147,8 +153,8 @@ export class EventPoller {
       await this.recordTxReceipt(log);
     }
 
-    this.lastProcessedBlock = currentBlock;
-    await setLastProcessedBlock(this.pool, currentBlock);
+    this.lastProcessedBlock = toBlock;
+    await setLastProcessedBlock(this.pool, toBlock);
 
     return allLogs.length;
   }

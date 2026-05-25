@@ -15,6 +15,8 @@ FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app/api
 
+RUN apk add --no-cache ca-certificates
+
 COPY --from=build /app/api/package*.json ./
 COPY --from=build /app/api/node_modules ./node_modules
 COPY --from=build /app/api/dist ./dist

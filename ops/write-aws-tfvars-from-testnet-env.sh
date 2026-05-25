@@ -22,7 +22,7 @@ frontend_domain_name = "cortex.wallyweb.com"
 api_domain_name      = "api.cortex.wallyweb.com"
 
 base_sepolia_rpc_url = "${RPC_URL:-https://sepolia.base.org}"
-start_block          = ${START_BLOCK:-0}
+start_block          = "${START_BLOCK:-0}"
 
 agent_registry_address       = "${AGENT_REGISTRY_ADDRESS:-}"
 intent_book_address          = "${INTENT_BOOK_ADDRESS:-}"

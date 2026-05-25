@@ -253,7 +253,7 @@ resource "aws_secretsmanager_secret" "app" {
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
   secret_string = jsonencode({
-    DATABASE_URL = "postgresql://${var.db_username}:${random_password.db.result}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.db_name}"
+    DATABASE_URL = "postgresql://${var.db_username}:${random_password.db.result}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.db_name}?sslmode=no-verify"
   })
 }
 
@@ -421,6 +421,11 @@ resource "aws_ecs_task_definition" "api" {
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
+  runtime_platform {
+    cpu_architecture        = "ARM64"
+    operating_system_family = "LINUX"
+  }
+
   container_definitions = jsonencode([{
     name      = "api"
     image     = "${aws_ecr_repository.api.repository_url}:${var.container_image_tag}"
@@ -482,13 +487,18 @@ resource "aws_ecs_task_definition" "indexer" {
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
+  runtime_platform {
+    cpu_architecture        = "ARM64"
+    operating_system_family = "LINUX"
+  }
+
   container_definitions = jsonencode([{
     name      = "indexer"
     image     = "${aws_ecr_repository.indexer.repository_url}:${var.container_image_tag}"
     essential = true
     environment = [
       { name = "RPC_URL", value = var.base_sepolia_rpc_url },
-      { name = "START_BLOCK", value = tostring(var.start_block) },
+      { name = "START_BLOCK", value = var.start_block },
       { name = "AGENT_REGISTRY_ADDRESS", value = var.agent_registry_address },
       { name = "INTENT_BOOK_ADDRESS", value = var.intent_book_address },
       { name = "POLICY_MODULE_ADDRESS", value = var.policy_module_address },

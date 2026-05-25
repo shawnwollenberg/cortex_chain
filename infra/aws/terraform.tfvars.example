@@ -5,7 +5,7 @@ frontend_domain_name = "cortex.wallyweb.com"
 api_domain_name      = "api.cortex.wallyweb.com"
 
 base_sepolia_rpc_url = "https://sepolia.base.org"
-start_block          = 0
+start_block          = "0"
 
 # Fill these after ops/deploy-testnet.sh writes ops/.env.testnet.
 agent_registry_address       = ""

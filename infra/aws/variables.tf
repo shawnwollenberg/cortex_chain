@@ -42,8 +42,8 @@ variable "base_sepolia_rpc_url" {
 
 variable "start_block" {
   description = "Indexer start block, usually the contract deployment block."
-  type        = number
-  default     = 0
+  type        = string
+  default     = "0"
 }
 
 variable "agent_registry_address" {

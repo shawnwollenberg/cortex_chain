@@ -8,11 +8,12 @@ INFRA_DIR="$ROOT_DIR/infra/aws"
 AWS_PROFILE="${AWS_PROFILE:-wallyweb}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
+TERRAFORM_BIN="${TERRAFORM_BIN:-terraform}"
 
 cd "$INFRA_DIR"
 
-API_REPO="$(terraform output -raw api_ecr_repository_url)"
-INDEXER_REPO="$(terraform output -raw indexer_ecr_repository_url)"
+API_REPO="$("$TERRAFORM_BIN" output -raw api_ecr_repository_url)"
+INDEXER_REPO="$("$TERRAFORM_BIN" output -raw indexer_ecr_repository_url)"
 ACCOUNT_ID="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query Account --output text)"
 
 aws ecr get-login-password --profile "$AWS_PROFILE" --region "$AWS_REGION" \

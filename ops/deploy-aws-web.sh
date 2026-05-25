@@ -8,10 +8,11 @@ INFRA_DIR="$ROOT_DIR/infra/aws"
 AWS_PROFILE="${AWS_PROFILE:-wallyweb}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://api.cortex.wallyweb.com}"
+TERRAFORM_BIN="${TERRAFORM_BIN:-terraform}"
 
 cd "$INFRA_DIR"
-BUCKET="$(terraform output -raw frontend_bucket)"
-DISTRIBUTION_ID="$(terraform output -raw frontend_cloudfront_distribution_id)"
+BUCKET="$("$TERRAFORM_BIN" output -raw frontend_bucket)"
+DISTRIBUTION_ID="$("$TERRAFORM_BIN" output -raw frontend_cloudfront_distribution_id)"
 
 cd "$ROOT_DIR/web"
 NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" npm run build
