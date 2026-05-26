@@ -29,6 +29,7 @@ Cortex gives agents:
 
 - Onchain identity and account policy.
 - Merchant and service discovery with verifiable ownership.
+- Hosted service catalog and quote document URLs that agents can verify by hash.
 - Quote commitments that bind the exact purchase terms.
 - Support for wallet transfers, ERC-20 transfers, swaps, facilitator-mediated payments, and x402.
 - Spending limits by merchant, token, target, facilitator, per-payment amount, and daily budget.
@@ -43,6 +44,7 @@ Cortex gives merchants:
 
 - A verifiable merchant profile and payout record.
 - Machine-readable service listings.
+- Hosted quote request and quote response exchange for agents and merchant systems.
 - Quote commitments that prove what the merchant offered and what the agent accepted.
 - Payment-rail flexibility instead of requiring every merchant to adopt one payment standard.
 - Receipts and fulfillment records that create a public performance history.
@@ -198,14 +200,16 @@ An agent needs a paid API result, such as company enrichment, identity verificat
 Flow:
 
 1. The merchant registers itself and its API service in Cortex.
-2. The agent discovers the service through the Cortex API or a marketplace.
-3. The merchant returns an x402 payment requirement.
-4. Cortex normalizes the x402 payload into a hash.
-5. The merchant commits a quote that binds the service, amount, token, facilitator, payment nonce, terms hash, and x402 payload hash.
-6. The agent checks its policy and signs only if the payment is allowed.
-7. The facilitator settles the payment.
-8. The merchant or facilitator records a receipt.
-9. Future agents can inspect receipt and dispute history before using the merchant.
+2. The merchant publishes a hosted catalog document and service hash.
+3. The agent discovers the service through the Cortex API or a marketplace.
+4. The agent publishes a hosted quote request that names the desired service, resource, and constraints.
+5. The merchant returns an x402 payment requirement and a hosted quote response.
+6. Cortex normalizes the x402 payload into a hash.
+7. The merchant commits a quote that binds the service, amount, token, facilitator, payment nonce, terms hash, and x402 payload hash.
+8. The agent checks its policy and signs only if the payment is allowed.
+9. The facilitator settles the payment.
+10. The merchant or facilitator records a receipt.
+11. Future agents can inspect receipt and dispute history before using the merchant.
 
 Why Cortex matters:
 
@@ -220,10 +224,12 @@ An agent buys a service from a merchant that does not use x402.
 Flow:
 
 1. The merchant registers a payout address and service metadata.
-2. The merchant commits a quote for a USDC payment.
-3. The quote binds merchant, service, agent, token, amount, resource hash, terms hash, and expiry.
-4. The agent verifies the quote and sends USDC from its smart account.
-5. The receipt is recorded after settlement.
+2. The merchant publishes a hosted catalog document.
+3. The agent publishes a quote request and the merchant publishes a quote response.
+4. The merchant commits a quote for a USDC payment.
+5. The quote binds merchant, service, agent, token, amount, resource hash, terms hash, and expiry.
+6. The agent verifies the quote and sends USDC from its smart account.
+7. The receipt is recorded after settlement.
 
 Why Cortex matters:
 
@@ -455,13 +461,12 @@ The strongest business model may be infrastructure revenue first, protocol fees 
 
 ### Product
 
-- Better onboarding for merchants.
-- Better onboarding for agent account creation.
-- A hosted service catalog publisher.
-- Human-readable and agent-readable service schemas.
-- A clearer quote request and quote acceptance flow.
-- A first-class x402 normalizer and verifier.
-- Example SDK flows for transfer, swap, facilitator, and x402 payments.
+- Browser wallet transaction flows for merchant registration, service registration, agent registration, quote commitment, policy setup, receipt recording, and disputes.
+- Production canonical JSON and schema validation for service catalogs, quote requests, quote responses, receipts, and fulfillment evidence.
+- Seeded hosted demos with real Base Sepolia merchants, services, tokens, catalogs, quote documents, receipts, and disputes.
+- Payment rail execution adapters for direct ERC-20 transfer, native token transfer, swap routers, facilitator settlement, and x402 facilitators.
+- A first-class x402 normalizer and verifier that maps payment requirements into Cortex quote, policy, receipt, and dispute records.
+- Cleaner contract semantics for non-facilitator rails so direct transfer and swap flows do not require facilitator-specific receipt authority unless intentionally configured.
 
 ### Trust
 
@@ -475,17 +480,17 @@ The strongest business model may be infrastructure revenue first, protocol fees 
 
 - Organization-level policy management.
 - Team roles and approval flows.
-- Budget dashboards.
-- Accounting exports.
-- Compliance metadata and attestations.
+- Budget dashboards that show remaining daily limits, per-merchant limits, rail usage, and denied spend attempts.
+- Accounting exports for receipts, disputes, fulfillment evidence, token movements, quote documents, and payment rail metadata.
+- Compliance metadata for jurisdiction, vendor review, data retention, risk category, and attested merchant status.
 
 ### Ecosystem
 
-- Integrations with wallets and smart account providers.
-- Integrations with x402 facilitators.
-- Example merchant templates.
-- Agent framework examples.
-- Marketplace and directory integrations.
+- Wallet and smart account integrations that show Cortex quote and policy context before signing.
+- x402 facilitator integrations that prove facilitator-mediated payments match merchant quotes and agent policy.
+- Merchant templates for API sellers, data sellers, compute sellers, SaaS actions, and agent-owned services.
+- Agent framework examples for tool-calling agents, MCP-style tools, autonomous procurement, and recurring service purchase loops.
+- Marketplace and directory integrations that use Cortex as the shared trust, quote, receipt, dispute, and reputation backend.
 
 ## 10. Recommended Near-Term Use-Case Demos
 
@@ -564,4 +569,3 @@ Cortex's best path is to become the shared trust and transaction layer for agent
 The project should stay focused on the missing infrastructure around payments: merchant identity, service discovery, quote commitments, delegated budgets, payment-rail abstraction, receipts, disputes, reputation, and analytics.
 
 The strongest initial market is agent-to-API commerce, followed by enterprise agent spend controls and merchant reputation. If these wedges show real usage, Cortex can expand into marketplace integrations, wallet integrations, facilitator partnerships, and eventually deeper chain-native infrastructure.
-

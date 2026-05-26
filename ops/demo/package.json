@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "demo": "tsx run.ts",
-    "sdk:commerce": "tsx ../sdk-examples/commerce-flow.ts"
+    "sdk:commerce": "tsx ../sdk-examples/commerce-flow.ts",
+    "sdk:payment-rails": "tsx ../sdk-examples/payment-rails.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

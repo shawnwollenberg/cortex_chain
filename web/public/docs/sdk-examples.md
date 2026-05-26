@@ -18,6 +18,7 @@ There is also a dry-run script template:
 cd ops/demo
 npm install
 npm run sdk:commerce
+npm run sdk:payment-rails
 ```
 
 Set `EXECUTE_TX=true` only when the environment variables point at funded test wallets and deployed contracts.
@@ -31,6 +32,34 @@ export COMMERCE_REGISTRY_ADDRESS=0x378c1d1a06e80f7a53809bf4289afcd131a3be87
 export POLICY_MODULE_ADDRESS=0x8f14e12177c7baf8d389629210c3c82718205fd1
 export INTENT_BOOK_ADDRESS=0xea1db573f299a3f064ffd306b309179ff0542e8c
 ```
+
+## Hosted Payment Rail Dry Run
+
+`ops/sdk-examples/payment-rails.ts` consumes hosted catalog, quote request, and quote response URLs, verifies their `keccak256` hashes, computes the onchain quote hash, checks merchant reputation, and prints the rail-specific execution plan.
+
+```bash
+cd ops/demo
+npm run sdk:payment-rails
+```
+
+Optional hosted document inputs:
+
+```bash
+export CATALOG_URL=https://api.cortex.wallyweb.com/catalogs/0x...
+export QUOTE_REQUEST_URL=https://api.cortex.wallyweb.com/quote-requests/0x...
+export QUOTE_RESPONSE_URL=https://api.cortex.wallyweb.com/quote-responses/0x...
+```
+
+By default this is a dry run. Set `EXECUTE_TX=true` only after the participating keys and roles are correct:
+
+- `MERCHANT_KEY` commits the quote.
+- `AGENT_KEY` pays or records signed payment policy.
+- `FACILITATOR_KEY` records receipts.
+- `SWAP_ROUTER_ADDRESS` and `SWAP_CALLDATA` are required for swap execution.
+
+The script supports direct ERC-20 transfer, swap/router execution, facilitator-mediated payments, and x402 policy recording. It intentionally keeps x402 settlement and swap routing provider-specific; Cortex verifies the quote, policy, hashes, and receipt context around those rails.
+
+Current Base Sepolia contract semantics still tie quote commit and receipt authority to a registered facilitator. Treat direct transfer and swap execution as the desired product path, but expect the next contract cleanup to make non-facilitator rails first-class.
 
 ## Client Setup
 
@@ -243,4 +272,3 @@ export PAYMENT_AMOUNT=1000000
 export PAYMENT_RAIL=0
 export EXECUTE_TX=false
 ```
-

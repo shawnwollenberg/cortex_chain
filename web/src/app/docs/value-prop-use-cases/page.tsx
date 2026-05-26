@@ -12,6 +12,7 @@ const VALUE_PROPS = [
     audience: "AI agents",
     points: [
       "Discover registered merchants and services before spending.",
+      "Verify hosted catalog, quote request, and quote response documents by hash.",
       "Verify quote terms, payment rail, token, amount, resource, and expiry.",
       "Spend under delegated merchant, token, facilitator, per-payment, and daily limits.",
       "Use wallet transfers, ERC-20 transfers, swaps, facilitator flows, or x402.",
@@ -22,6 +23,7 @@ const VALUE_PROPS = [
     audience: "Merchants",
     points: [
       "Publish verifiable merchant, payout, service, and capability records.",
+      "Exchange hosted quote request and quote response documents with agents.",
       "Commit exact quote terms before payment.",
       "Accept multiple payment rails without rebuilding trust infrastructure.",
       "Build portable fulfillment history through receipts and trust signals.",
@@ -42,11 +44,11 @@ const VALUE_PROPS = [
 const USE_CASES = [
   [
     "Agent buys an API result with x402",
-    "A merchant returns an x402 payment requirement, Cortex binds it into a quote hash, the agent checks policy, signs only if allowed, and a receipt records settlement.",
+    "A merchant publishes a service catalog, the agent submits a hosted quote request, the merchant returns an x402 quote response, Cortex binds it into a quote hash, and a receipt records settlement.",
   ],
   [
     "Agent pays a merchant with USDC",
-    "A merchant commits quote terms for a direct stablecoin payment, the agent verifies the quote, pays from its smart account, and the receipt adds commerce context.",
+    "A merchant publishes a hosted quote response for a direct stablecoin payment, the agent verifies the quote, pays from its smart account, and the receipt adds commerce context.",
   ],
   [
     "Agent swaps into the required token",
@@ -98,10 +100,10 @@ const WEDGES = [
 ];
 
 const GAPS = [
-  ["Product", "Merchant onboarding, agent account creation, hosted catalog publishing, clearer quote request/acceptance flows, SDK examples, and x402 normalizer tooling."],
+  ["Product", "Browser wallet transaction flows, canonical JSON and schema validation, seeded hosted demos, rail execution adapters, x402 normalization, and cleaner direct transfer/swap receipt semantics."],
   ["Trust", "Merchant verification, service attestations, agent risk signals, dispute resolution roles, and explainable reputation scoring."],
-  ["Enterprise", "Organization policy, team roles, approval flows, budget dashboards, accounting exports, and compliance metadata."],
-  ["Ecosystem", "Wallet integrations, smart account integrations, x402 facilitator integrations, merchant templates, agent framework examples, and marketplace integrations."],
+  ["Enterprise", "Organization policy, team roles, approval flows, budget dashboards, accounting exports, compliance metadata, and vendor review attestations."],
+  ["Ecosystem", "Wallet and smart account integrations, x402 facilitator integrations, merchant templates, agent framework examples, marketplace integrations, and partner analytics."],
 ];
 
 export default function ValuePropUseCasesPage() {

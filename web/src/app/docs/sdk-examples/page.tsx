@@ -78,7 +78,26 @@ export default function SdkExamplesPage() {
         </p>
         <CodeBlock language="bash">{`cd ops/demo
 npm install
-npm run sdk:commerce`}</CodeBlock>
+npm run sdk:commerce
+npm run sdk:payment-rails`}</CodeBlock>
+      </div>
+
+      <div className="my-6 rounded-lg border border-border bg-surface p-5">
+        <h2 className="text-base font-semibold">Hosted payment rail dry run</h2>
+        <p className="mt-2 text-sm text-muted">
+          <code>ops/sdk-examples/payment-rails.ts</code> consumes hosted catalog and quote URLs,
+          verifies their hashes, computes the quote hash, checks reputation, and prints a rail-specific
+          execution plan before any transaction is sent.
+        </p>
+        <CodeBlock language="bash">{`export CATALOG_URL=https://api.cortex.wallyweb.com/catalogs/0x...
+export QUOTE_REQUEST_URL=https://api.cortex.wallyweb.com/quote-requests/0x...
+export QUOTE_RESPONSE_URL=https://api.cortex.wallyweb.com/quote-responses/0x...
+npm run sdk:payment-rails`}</CodeBlock>
+        <p className="mt-3 text-sm text-muted">
+          Current Base Sepolia contract semantics still tie quote commit and receipt authority to a
+          registered facilitator. Direct transfer and swap rails are supported as product paths, with a
+          contract cleanup needed to make non-facilitator rails first-class.
+        </p>
       </div>
 
       <h2 className="mb-4 mt-10 text-xl font-semibold">Client Setup</h2>
