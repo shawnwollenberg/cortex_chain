@@ -16,6 +16,11 @@ const SECTIONS = [
     description: "Run the full stack locally in under 5 minutes.",
   },
   {
+    title: "Examples",
+    href: "/docs/examples",
+    description: "Merchant onboarding, agent accounts, policies, quotes, receipts, and SDK usage.",
+  },
+  {
     title: "Architecture",
     href: "/docs/architecture",
     description: "System diagram, data flow, and database schema.",
