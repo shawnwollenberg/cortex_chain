@@ -7,17 +7,18 @@ Open:
 - Hosted: `https://cortex.wallyweb.com/onboarding`
 - Local: `http://localhost:3000/onboarding`
 
-The page does not request private keys, connect a wallet, or submit transactions. It generates metadata JSON, registration command templates, policy setup templates, and quote acceptance checklists that can be copied into a local wallet/script workflow.
+The page does not request private keys, signatures, or transaction submission. It can connect to an injected wallet for read-only checks and Base Sepolia network switching, then generates metadata JSON, registration command templates, policy setup templates, and quote acceptance checklists that can be copied into a local wallet/script workflow.
 
 Generated hashes use `keccak256` through `viem`, matching the convention used in Cortex contract tests and examples.
 
-The read-only preflight panel can connect to an injected wallet to check the selected account, chain ID, deployed contract bytecode, and hosted API health. It does not request signatures or submit transactions.
+The read-only preflight panel can connect to an injected wallet to check the selected account, chain ID, deployed contract bytecode, and hosted API health. It can also ask the wallet to switch or add Base Sepolia. It does not request signatures or submit transactions.
 
 ## Current Onboarding Steps
 
 0. **Read-only preflight**
    - Connect an injected wallet.
    - Confirm the wallet is on Base Sepolia (`84532`).
+   - Switch or add Base Sepolia from the wallet if needed.
    - Check deployed bytecode for AgentRegistry, PolicyModule, and CommerceRegistry.
    - Check hosted API health.
    - Copy the connected wallet address into merchant owner, agent owner, and quote agent fields.
@@ -28,12 +29,14 @@ The read-only preflight panel can connect to an injected wallet to check the sel
    - Generate the merchant metadata hash from the displayed JSON.
    - Generate a `registerMerchant` command for `CommerceRegistry`.
    - Check the hosted API for the indexed merchant record.
+   - Read the merchant record directly from `CommerceRegistry.getMerchant`.
 
 2. **Service catalog**
    - Build service metadata inputs.
    - Set service id, endpoint, method, description, capability, input/output schemas, metadata URI, metadata hash, and capability hash.
    - Generate a `registerService` command.
    - Check the hosted API for indexed active services.
+   - Read the service record directly from `CommerceRegistry.getService`.
 
 3. **Publish catalog**
    - Generate a schema-compatible merchant/service catalog JSON document.
@@ -47,6 +50,7 @@ The read-only preflight panel can connect to an injected wallet to check the sel
    - Register an agent identity through `AgentRegistry`.
    - Generate an agent capabilities hash.
    - Generate a signed payment policy command for facilitator-mediated or x402-style payments.
+   - Read agent ids owned by the connected wallet from `AgentRegistry.getAgentsByOwner`.
 
 5. **Quote acceptance**
    - Build an agent quote request JSON document.
@@ -68,7 +72,6 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 
 ## Next Product Improvements
 
-- Add optional wallet network switching and deeper contract reads for merchant/service state.
 - Add stronger canonical JSON rules for teams that need byte-for-byte reproducibility across tools.
 - Add hosted catalog publishing to IPFS, Arweave, S3, or a Cortex-managed storage path.
 - Add hosted quote request/response API endpoints instead of only quote templates.

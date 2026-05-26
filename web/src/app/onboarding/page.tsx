@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { keccak256, toBytes, isAddress } from "viem";
+import { decodeFunctionResult, encodeFunctionData, isAddress, keccak256, toBytes } from "viem";
 import { useMemo, useState } from "react";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://api.cortex.wallyweb.com").replace(/\/$/, "");
+const BASE_SEPOLIA_CHAIN_ID = 84532;
+const BASE_SEPOLIA_CHAIN_HEX = "0x14a34";
 
 const CONTRACTS = {
   commerceRegistry: "0x378c1d1a06e80f7a53809bf4289afcd131a3be87",
@@ -14,6 +16,58 @@ const CONTRACTS = {
 
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+const COMMERCE_READ_ABI = [
+  {
+    type: "function",
+    name: "getMerchant",
+    inputs: [{ name: "merchantId", type: "uint256" }],
+    outputs: [
+      {
+        name: "merchant",
+        type: "tuple",
+        components: [
+          { name: "owner", type: "address" },
+          { name: "payoutAddress", type: "address" },
+          { name: "metadataURI", type: "string" },
+          { name: "metadataHash", type: "bytes32" },
+          { name: "active", type: "bool" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getService",
+    inputs: [{ name: "serviceNumericId", type: "uint256" }],
+    outputs: [
+      {
+        name: "service",
+        type: "tuple",
+        components: [
+          { name: "merchantId", type: "uint256" },
+          { name: "serviceId", type: "string" },
+          { name: "metadataURI", type: "string" },
+          { name: "metadataHash", type: "bytes32" },
+          { name: "capabilityHash", type: "bytes32" },
+          { name: "active", type: "bool" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+] as const;
+
+const AGENT_READ_ABI = [
+  {
+    type: "function",
+    name: "getAgentsByOwner",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "agentIds", type: "uint256[]" }],
+    stateMutability: "view",
+  },
+] as const;
 
 type StepId = "merchant" | "service" | "catalog" | "agent" | "quote";
 type LookupState = {
@@ -33,6 +87,14 @@ type WalletCheckState = {
   contracts: Record<string, boolean>;
   loading: boolean;
   error: string | null;
+};
+
+type OnchainReadState = {
+  loading: boolean;
+  error: string | null;
+  merchant: Record<string, unknown> | null;
+  service: Record<string, unknown> | null;
+  agentIds: string[] | null;
 };
 
 type FieldProps = {
@@ -191,13 +253,15 @@ function LookupPanel({
 function PreflightPanel({
   state,
   onCheck,
+  onSwitchNetwork,
   onUseWallet,
 }: {
   state: WalletCheckState;
   onCheck: () => void;
+  onSwitchNetwork: () => void;
   onUseWallet: () => void;
 }) {
-  const onBaseSepolia = state.chainId === 84532;
+  const onBaseSepolia = state.chainId === BASE_SEPOLIA_CHAIN_ID;
   const contractNames = Object.keys(CONTRACTS);
   const allContractsFound = contractNames.every((name) => state.contracts[name]);
 
@@ -218,6 +282,13 @@ function PreflightPanel({
             className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
           >
             {state.loading ? "Checking" : "Run checks"}
+          </button>
+          <button
+            type="button"
+            onClick={onSwitchNetwork}
+            className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+          >
+            Switch to Base Sepolia
           </button>
           <button
             type="button"
@@ -272,6 +343,55 @@ function PreflightPanel({
   );
 }
 
+function OnchainReadPanel({
+  state,
+  onRead,
+}: {
+  state: OnchainReadState;
+  onRead: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">Onchain state check</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">
+            Reads the merchant, service, and wallet-owned agent ids directly from Base Sepolia.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRead}
+          className="rounded-md border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-muted hover:text-text"
+        >
+          {state.loading ? "Reading" : "Read contracts"}
+        </button>
+      </div>
+      {state.error ? <p className="mt-3 text-sm text-red-200">{state.error}</p> : null}
+      <div className="mt-4 grid gap-3">
+        <OnchainResult title="Merchant" value={state.merchant} empty="No merchant loaded" />
+        <OnchainResult title="Service" value={state.service} empty="No service loaded" />
+        <OnchainResult title="Agent ids owned by wallet" value={state.agentIds} empty="Connect a wallet to read agent ids" />
+      </div>
+    </div>
+  );
+}
+
+function OnchainResult({ title, value, empty }: { title: string; value: unknown; empty: string }) {
+  return (
+    <div className="rounded-md border border-border bg-[#090d12] p-3">
+      <p className="text-xs font-medium">{title}</p>
+      {value ? (
+        <pre className="mt-2 max-h-48 overflow-auto text-xs leading-5 text-muted">
+          <code>{JSON.stringify(value, null, 2)}</code>
+        </pre>
+      ) : (
+        <p className="mt-2 text-xs text-muted">{empty}</p>
+      )}
+    </div>
+  );
+}
+
 function Checklist({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2 text-sm text-muted">
@@ -294,6 +414,13 @@ export default function OnboardingPage() {
     contracts: {},
     loading: false,
     error: null,
+  });
+  const [onchainRead, setOnchainRead] = useState<OnchainReadState>({
+    loading: false,
+    error: null,
+    merchant: null,
+    service: null,
+    agentIds: null,
   });
   const [merchantName, setMerchantName] = useState("Example Data Merchant");
   const [website, setWebsite] = useState("https://merchant.example");
@@ -722,6 +849,75 @@ await merchantWallet.writeContract({
       }));
     }
   };
+  const switchToBaseSepolia = async () => {
+    setWalletCheck((current) => ({ ...current, loading: true, error: null }));
+    try {
+      const provider = getEthereumProvider();
+      if (!provider) throw new Error("No injected wallet found. Install or unlock a wallet first.");
+
+      try {
+        await provider.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: BASE_SEPOLIA_CHAIN_HEX }],
+        });
+      } catch (switchError) {
+        if (isWalletChainMissingError(switchError)) {
+          await provider.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: BASE_SEPOLIA_CHAIN_HEX,
+                chainName: "Base Sepolia",
+                nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
+                rpcUrls: ["https://sepolia.base.org"],
+                blockExplorerUrls: ["https://sepolia.basescan.org"],
+              },
+            ],
+          });
+        } else {
+          throw switchError;
+        }
+      }
+
+      await runWalletChecks();
+    } catch (error) {
+      setWalletCheck((current) => ({
+        ...current,
+        loading: false,
+        error: error instanceof Error ? error.message : "Network switch failed",
+      }));
+    }
+  };
+  const readOnchainState = async () => {
+    setOnchainRead((current) => ({ ...current, loading: true, error: null }));
+    try {
+      const provider = getEthereumProvider();
+      if (!provider) throw new Error("No injected wallet found. Install or unlock a wallet first.");
+      const chainHex = await provider.request({ method: "eth_chainId" }) as string;
+      const chainId = Number.parseInt(chainHex, 16);
+      if (chainId !== BASE_SEPOLIA_CHAIN_ID) throw new Error("Switch your wallet to Base Sepolia before reading contracts.");
+
+      const nextMerchant = await readMerchant(provider, merchantId);
+      const nextService = await readService(provider, serviceNumericId);
+      const nextAgentIds = walletCheck.account && isAddress(walletCheck.account)
+        ? await readAgentIds(provider, walletCheck.account)
+        : null;
+
+      setOnchainRead({
+        loading: false,
+        error: null,
+        merchant: nextMerchant,
+        service: nextService,
+        agentIds: nextAgentIds,
+      });
+    } catch (error) {
+      setOnchainRead((current) => ({
+        ...current,
+        loading: false,
+        error: error instanceof Error ? error.message : "Onchain read failed",
+      }));
+    }
+  };
   const useWalletAddress = () => {
     if (!walletCheck.account) return;
     setMerchantOwner(walletCheck.account);
@@ -751,7 +947,12 @@ await merchantWallet.writeContract({
           </div>
         </div>
 
-        <PreflightPanel state={walletCheck} onCheck={runWalletChecks} onUseWallet={useWalletAddress} />
+        <PreflightPanel
+          state={walletCheck}
+          onCheck={runWalletChecks}
+          onSwitchNetwork={switchToBaseSepolia}
+          onUseWallet={useWalletAddress}
+        />
 
         <div className="mb-6 grid gap-3 md:grid-cols-5">
           {[
@@ -813,6 +1014,7 @@ await merchantWallet.writeContract({
                 description="After registration and indexing, confirm the merchant record is visible."
                 path={`/merchants?owner=${encodeURIComponent(merchantOwner)}&limit=5`}
               />
+              <OnchainReadPanel state={onchainRead} onRead={readOnchainState} />
             </div>
           </section>
         ) : null}
@@ -864,6 +1066,7 @@ await merchantWallet.writeContract({
                 description="After registration and indexing, confirm active services for this merchant."
                 path={`/services?merchant_id=${encodeURIComponent(merchantId)}&active=true&limit=10`}
               />
+              <OnchainReadPanel state={onchainRead} onRead={readOnchainState} />
             </div>
           </section>
         ) : null}
@@ -973,6 +1176,7 @@ cast send "${CONTRACTS.commerceRegistry}" \\
             <div className="grid gap-4">
               <CodePanel title="Agent metadata JSON" value={agentMetadata} />
               <CodePanel title="Register agent and set payment policy" value={agentCommand} />
+              <OnchainReadPanel state={onchainRead} onRead={readOnchainState} />
             </div>
           </section>
         ) : null}
@@ -1132,4 +1336,98 @@ function contractLabel(name: string) {
     default:
       return name;
   }
+}
+
+async function readMerchant(provider: EthereumProvider, merchantId: string) {
+  const id = parsePositiveBigInt(merchantId, "merchant id");
+  const data = encodeFunctionData({
+    abi: COMMERCE_READ_ABI,
+    functionName: "getMerchant",
+    args: [id],
+  });
+  const result = await callContract(provider, CONTRACTS.commerceRegistry, data);
+  const merchant = decodeFunctionResult({
+    abi: COMMERCE_READ_ABI,
+    functionName: "getMerchant",
+    data: result as `0x${string}`,
+  });
+  return normalizeTuple(merchant, ["owner", "payoutAddress", "metadataURI", "metadataHash", "active"]);
+}
+
+async function readService(provider: EthereumProvider, serviceNumericId: string) {
+  const id = parsePositiveBigInt(serviceNumericId, "service numeric id");
+  const data = encodeFunctionData({
+    abi: COMMERCE_READ_ABI,
+    functionName: "getService",
+    args: [id],
+  });
+  const result = await callContract(provider, CONTRACTS.commerceRegistry, data);
+  const service = decodeFunctionResult({
+    abi: COMMERCE_READ_ABI,
+    functionName: "getService",
+    data: result as `0x${string}`,
+  });
+  return normalizeTuple(service, ["merchantId", "serviceId", "metadataURI", "metadataHash", "capabilityHash", "active"]);
+}
+
+async function readAgentIds(provider: EthereumProvider, owner: string) {
+  const data = encodeFunctionData({
+    abi: AGENT_READ_ABI,
+    functionName: "getAgentsByOwner",
+    args: [owner as `0x${string}`],
+  });
+  const result = await callContract(provider, CONTRACTS.agentRegistry, data);
+  const agentIds = decodeFunctionResult({
+    abi: AGENT_READ_ABI,
+    functionName: "getAgentsByOwner",
+    data: result as `0x${string}`,
+  });
+  return Array.isArray(agentIds) ? agentIds.map((value) => value.toString()) : [];
+}
+
+async function callContract(provider: EthereumProvider, to: string, data: string) {
+  return provider.request({
+    method: "eth_call",
+    params: [{ to, data }, "latest"],
+  });
+}
+
+function parsePositiveBigInt(value: string, label: string) {
+  if (!/^\d+$/.test(value) || BigInt(value) === BigInt(0)) throw new Error(`Enter a registered ${label}.`);
+  return BigInt(value);
+}
+
+function normalizeTuple(value: unknown, keys: string[]) {
+  const record: Record<string, unknown> = {};
+  keys.forEach((key, index) => {
+    const tupleValue = getTupleValue(value, key, index);
+    record[key] = stringifyBigInts(tupleValue);
+  });
+  return record;
+}
+
+function getTupleValue(value: unknown, key: string, index: number) {
+  if (Array.isArray(value)) return value[index];
+  if (value && typeof value === "object" && key in value) return (value as Record<string, unknown>)[key];
+  return null;
+}
+
+function stringifyBigInts(value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) return value.map(stringifyBigInts);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, stringifyBigInts(child)]),
+    );
+  }
+  return value;
+}
+
+function isWalletChainMissingError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: number }).code === 4902,
+  );
 }
