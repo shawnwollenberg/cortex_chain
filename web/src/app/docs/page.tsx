@@ -21,6 +21,11 @@ const SECTIONS = [
     description: "Merchant onboarding, agent accounts, policies, quotes, receipts, and SDK usage.",
   },
   {
+    title: "Value Proposition and Use Cases",
+    href: "/docs/value-prop-use-cases",
+    description: "Strategic positioning, customer segments, use cases, wedges, and product gaps.",
+  },
+  {
     title: "Architecture",
     href: "/docs/architecture",
     description: "System diagram, data flow, and database schema.",
