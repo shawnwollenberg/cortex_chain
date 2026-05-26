@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { keccak256, toBytes, isAddress } from "viem";
 import { useMemo, useState } from "react";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://api.cortex.wallyweb.com").replace(/\/$/, "");
@@ -15,6 +16,11 @@ const ZERO_HASH = "0x00000000000000000000000000000000000000000000000000000000000
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 type StepId = "merchant" | "service" | "agent" | "quote";
+type LookupState = {
+  loading: boolean;
+  error: string | null;
+  result: unknown;
+};
 
 type FieldProps = {
   label: string;
@@ -83,6 +89,70 @@ function CodePanel({ title, value }: { title: string; value: string }) {
   );
 }
 
+function StatusPill({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      className={`rounded-md border px-2 py-1 text-xs ${
+        ok ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function LookupPanel({
+  title,
+  description,
+  path,
+}: {
+  title: string;
+  description: string;
+  path: string;
+}) {
+  const [state, setState] = useState<LookupState>({ loading: false, error: null, result: null });
+  const url = `${API_URL}${path}`;
+
+  return (
+    <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            setState({ loading: true, error: null, result: null });
+            try {
+              const response = await fetch(url);
+              const body = (await response.json()) as unknown;
+              if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+              setState({ loading: false, error: null, result: body });
+            } catch (error) {
+              setState({
+                loading: false,
+                error: error instanceof Error ? error.message : "Lookup failed",
+                result: null,
+              });
+            }
+          }}
+          className="rounded-md border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-muted hover:text-text"
+        >
+          {state.loading ? "Checking" : "Check API"}
+        </button>
+      </div>
+      <p className="mt-3 break-all font-mono text-xs text-muted">{url}</p>
+      {state.error ? <p className="mt-3 text-sm text-red-200">{state.error}</p> : null}
+      {state.result ? (
+        <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-border bg-[#090d12] p-3 text-xs leading-5">
+          <code>{JSON.stringify(state.result, null, 2)}</code>
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
 function Checklist({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2 text-sm text-muted">
@@ -101,6 +171,7 @@ export default function OnboardingPage() {
   const [merchantName, setMerchantName] = useState("Example Data Merchant");
   const [website, setWebsite] = useState("https://merchant.example");
   const [support, setSupport] = useState("support@merchant.example");
+  const [merchantOwner, setMerchantOwner] = useState("0x...");
   const [payout, setPayout] = useState("0x...");
   const [refundPolicy, setRefundPolicy] = useState("Refunds available when fulfillment does not match accepted quote terms.");
   const [merchantUri, setMerchantUri] = useState("ipfs://merchant-metadata");
@@ -120,6 +191,7 @@ export default function OnboardingPage() {
   const [agentOwner, setAgentOwner] = useState("0x...");
   const [agentUri, setAgentUri] = useState("ipfs://agent-metadata");
   const [agentPubkey, setAgentPubkey] = useState("0x...");
+  const [agentCapabilities, setAgentCapabilities] = useState("commerce.procurement.v1");
   const [agentCapabilitiesHash, setAgentCapabilitiesHash] = useState(ZERO_HASH);
   const [maxPerPayment, setMaxPerPayment] = useState("1000000");
   const [maxPerDay, setMaxPerDay] = useState("10000000");
@@ -131,6 +203,9 @@ export default function OnboardingPage() {
   const [amount, setAmount] = useState("1000000");
   const [paymentRail, setPaymentRail] = useState("3");
   const [paymentNonce, setPaymentNonce] = useState("1");
+  const [resourceDescriptor, setResourceDescriptor] = useState("merchant-service-resource-v1");
+  const [termsDocument, setTermsDocument] = useState("One company enrichment response for the requested domain.");
+  const [x402Payload, setX402Payload] = useState("x402 payment requirement payload");
   const [resourceHash, setResourceHash] = useState(ZERO_HASH);
   const [termsHash, setTermsHash] = useState(ZERO_HASH);
   const [x402PayloadHash, setX402PayloadHash] = useState(ZERO_HASH);
@@ -142,6 +217,7 @@ export default function OnboardingPage() {
           name: merchantName,
           website,
           support,
+          owner_address: merchantOwner,
           payout_chain: "base-sepolia",
           payout_address: payout,
           refund_policy: refundPolicy,
@@ -153,7 +229,7 @@ export default function OnboardingPage() {
         null,
         2,
       ),
-    [merchantName, website, support, payout, refundPolicy],
+    [merchantName, website, support, merchantOwner, payout, refundPolicy],
   );
 
   const serviceMetadata = useMemo(
@@ -183,6 +259,7 @@ export default function OnboardingPage() {
           owner: agentOwner,
           network: "base-sepolia",
           intended_use: "Autonomous purchasing under Cortex policy controls.",
+          capabilities: agentCapabilities,
           policy_expectations: {
             token,
             merchant_id: merchantId,
@@ -194,7 +271,7 @@ export default function OnboardingPage() {
         null,
         2,
       ),
-    [agentName, agentOwner, token, merchantId, facilitator, maxPerPayment, maxPerDay],
+    [agentName, agentOwner, agentCapabilities, token, merchantId, facilitator, maxPerPayment, maxPerDay],
   );
 
   const merchantCommand = `export RPC_URL=https://sepolia.base.org
@@ -212,7 +289,7 @@ cast send "$COMMERCE_REGISTRY_ADDRESS" \\
   --rpc-url "$RPC_URL" \\
   --private-key "$MERCHANT_KEY"
 
-curl "${API_URL}/merchants?owner=<merchant-owner-address>"`;
+curl "${API_URL}/merchants?owner=${merchantOwner}"`;
 
   const serviceCommand = `export RPC_URL=https://sepolia.base.org
 export MERCHANT_KEY=0x...
@@ -313,6 +390,20 @@ await merchantWallet.writeContract({
   args: [quote],
 });`;
 
+  const merchantPayoutValid = isAddress(payout);
+  const merchantOwnerValid = isAddress(merchantOwner);
+  const agentOwnerValid = isAddress(agentOwner);
+  const tokenValid = isAddress(token);
+  const facilitatorValid = isAddress(facilitator);
+  const quoteAgentValid = isAddress(quoteAgent);
+  const hashMerchantMetadata = () => setMerchantHash(hashText(merchantMetadata));
+  const hashServiceMetadata = () => setServiceHash(hashText(serviceMetadata));
+  const hashCapability = () => setCapabilityHash(hashText(capability));
+  const hashAgentCapabilities = () => setAgentCapabilitiesHash(hashText(agentCapabilities));
+  const hashResource = () => setResourceHash(hashText(resourceDescriptor));
+  const hashTerms = () => setTermsHash(hashText(termsDocument));
+  const hashX402Payload = () => setX402PayloadHash(hashText(x402Payload));
+
   return (
     <main className="min-h-screen bg-[#090d12]">
       <div className="mx-auto max-w-7xl px-4 py-8">
@@ -370,15 +461,30 @@ await merchantWallet.writeContract({
                 <Field label="Merchant name" value={merchantName} onChange={setMerchantName} />
                 <Field label="Website" value={website} onChange={setWebsite} />
                 <Field label="Support contact" value={support} onChange={setSupport} />
+                <Field label="Merchant owner" value={merchantOwner} onChange={setMerchantOwner} />
+                <StatusPill ok={merchantOwnerValid} label={merchantOwnerValid ? "Valid owner address" : "Enter the transaction sender address"} />
                 <Field label="Payout address" value={payout} onChange={setPayout} />
+                <StatusPill ok={merchantPayoutValid} label={merchantPayoutValid ? "Valid payout address" : "Enter a 0x payout address"} />
                 <TextArea label="Refund policy" value={refundPolicy} onChange={setRefundPolicy} />
                 <Field label="Metadata URI" value={merchantUri} onChange={setMerchantUri} />
                 <Field label="Metadata hash" value={merchantHash} onChange={setMerchantHash} />
+                <button
+                  type="button"
+                  onClick={hashMerchantMetadata}
+                  className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                >
+                  Generate merchant metadata hash
+                </button>
               </div>
             </div>
             <div className="grid gap-4">
               <CodePanel title="Merchant metadata JSON" value={merchantMetadata} />
               <CodePanel title="Register merchant" value={merchantCommand} />
+              <LookupPanel
+                title="Merchant API check"
+                description="After registration and indexing, confirm the merchant record is visible."
+                path={`/merchants?owner=${encodeURIComponent(merchantOwner)}&limit=5`}
+              />
             </div>
           </section>
         ) : null}
@@ -401,11 +507,32 @@ await merchantWallet.writeContract({
                 <Field label="Service metadata URI" value={serviceUri} onChange={setServiceUri} />
                 <Field label="Service metadata hash" value={serviceHash} onChange={setServiceHash} />
                 <Field label="Capability hash" value={capabilityHash} onChange={setCapabilityHash} />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={hashServiceMetadata}
+                    className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                  >
+                    Hash service metadata
+                  </button>
+                  <button
+                    type="button"
+                    onClick={hashCapability}
+                    className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                  >
+                    Hash capability
+                  </button>
+                </div>
               </div>
             </div>
             <div className="grid gap-4">
               <CodePanel title="Service metadata JSON" value={serviceMetadata} />
               <CodePanel title="Register service" value={serviceCommand} />
+              <LookupPanel
+                title="Service API check"
+                description="After registration and indexing, confirm active services for this merchant."
+                path={`/services?merchant_id=${encodeURIComponent(merchantId)}&active=true&limit=10`}
+              />
             </div>
           </section>
         ) : null}
@@ -421,13 +548,24 @@ await merchantWallet.writeContract({
               <div className="mt-5 grid gap-4">
                 <Field label="Agent name" value={agentName} onChange={setAgentName} />
                 <Field label="Agent owner" value={agentOwner} onChange={setAgentOwner} />
+                <StatusPill ok={agentOwnerValid} label={agentOwnerValid ? "Valid owner address" : "Enter a 0x owner address"} />
                 <Field label="Agent metadata URI" value={agentUri} onChange={setAgentUri} />
                 <Field label="Agent pubkey" value={agentPubkey} onChange={setAgentPubkey} />
+                <Field label="Agent capabilities" value={agentCapabilities} onChange={setAgentCapabilities} />
                 <Field label="Agent capabilities hash" value={agentCapabilitiesHash} onChange={setAgentCapabilitiesHash} />
                 <Field label="Token" value={token} onChange={setToken} />
+                <StatusPill ok={tokenValid} label={tokenValid ? "Valid token address" : "Enter a 0x token address"} />
                 <Field label="Facilitator" value={facilitator} onChange={setFacilitator} />
+                <StatusPill ok={facilitatorValid} label={facilitatorValid ? "Valid facilitator address" : "Enter a 0x facilitator address"} />
                 <Field label="Max per payment" value={maxPerPayment} onChange={setMaxPerPayment} />
                 <Field label="Max per day" value={maxPerDay} onChange={setMaxPerDay} />
+                <button
+                  type="button"
+                  onClick={hashAgentCapabilities}
+                  className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                >
+                  Hash agent capabilities
+                </button>
               </div>
             </div>
             <div className="grid gap-4">
@@ -449,14 +587,43 @@ await merchantWallet.writeContract({
                 <Field label="Merchant ID" value={merchantId} onChange={setMerchantId} />
                 <Field label="Service numeric ID" value={serviceNumericId} onChange={setServiceNumericId} />
                 <Field label="Agent address" value={quoteAgent} onChange={setQuoteAgent} />
+                <StatusPill ok={quoteAgentValid} label={quoteAgentValid ? "Valid agent address" : "Enter a 0x agent address"} />
                 <Field label="Token" value={token} onChange={setToken} />
+                <StatusPill ok={tokenValid} label={tokenValid ? "Valid token address" : "Enter a 0x token address"} />
                 <Field label="Facilitator" value={facilitator} onChange={setFacilitator} />
+                <StatusPill ok={facilitatorValid} label={facilitatorValid ? "Valid facilitator address" : "Enter a 0x facilitator address"} />
                 <Field label="Amount" value={amount} onChange={setAmount} />
                 <Field label="Payment rail" value={paymentRail} onChange={setPaymentRail} />
                 <Field label="Payment nonce" value={paymentNonce} onChange={setPaymentNonce} />
+                <TextArea label="Resource descriptor" value={resourceDescriptor} onChange={setResourceDescriptor} />
+                <TextArea label="Terms document" value={termsDocument} onChange={setTermsDocument} />
+                <TextArea label="x402 payload" value={x402Payload} onChange={setX402Payload} />
                 <Field label="Resource hash" value={resourceHash} onChange={setResourceHash} />
                 <Field label="Terms hash" value={termsHash} onChange={setTermsHash} />
                 <Field label="x402 payload hash" value={x402PayloadHash} onChange={setX402PayloadHash} />
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={hashResource}
+                    className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                  >
+                    Hash resource
+                  </button>
+                  <button
+                    type="button"
+                    onClick={hashTerms}
+                    className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                  >
+                    Hash quote terms
+                  </button>
+                  <button
+                    type="button"
+                    onClick={hashX402Payload}
+                    className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                  >
+                    Hash x402 sample
+                  </button>
+                </div>
               </div>
               <div className="mt-6 rounded-lg border border-border bg-[#0d1117] p-4">
                 <h3 className="text-sm font-semibold">Agent acceptance checklist</h3>
@@ -477,6 +644,11 @@ await merchantWallet.writeContract({
             <div className="grid gap-4">
               <CodePanel title="Quote payload" value={quotePayload} />
               <CodePanel title="Compute and commit quote" value={quoteCommand} />
+              <LookupPanel
+                title="Merchant reputation check"
+                description="Before accepting a quote, inspect indexed merchant reputation."
+                path={`/merchants/${encodeURIComponent(merchantId)}/reputation`}
+              />
             </div>
           </section>
         ) : null}
@@ -491,4 +663,8 @@ function safeJson(value: string) {
   } catch {
     return value;
   }
+}
+
+function hashText(value: string) {
+  return keccak256(toBytes(value));
 }
