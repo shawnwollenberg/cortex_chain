@@ -1,6 +1,11 @@
 # REST API Reference
 
-Base URL: `http://localhost:3001` (configurable via `API_PORT`)
+Base URLs:
+
+- Hosted Base Sepolia API: `https://api.cortex.wallyweb.com`
+- Local development API: `http://localhost:3001` (configurable via `API_PORT`)
+
+The hosted API currently indexes the live Base Sepolia deployment. Local development uses the same routes against your local Postgres/indexer stack.
 
 ## Endpoints
 

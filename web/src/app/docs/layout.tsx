@@ -16,8 +16,8 @@ const docsJsonLd = {
   "@context": "https://schema.org",
   "@type": "TechArticle",
   name: "Cortex Documentation",
-  description: "Developer documentation for the Cortex agent-native Ethereum L2.",
-  url: "https://cortex.dev/docs",
+  description: "Developer documentation for the Cortex Base-native agentic commerce protocol.",
+  url: "https://cortex.wallyweb.com/docs",
   about: {
     "@type": "SoftwareApplication",
     name: "Cortex",

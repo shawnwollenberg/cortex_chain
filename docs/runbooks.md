@@ -1,6 +1,6 @@
 # Runbooks
 
-Operational procedures for the Agent-Native L2 stack.
+Operational procedures for the Cortex agentic commerce protocol stack.
 
 ## Restart Services
 
@@ -89,13 +89,15 @@ TRUNCATE agents, intents, fills, policies, tx_receipts, indexer_state;
 
 Then restart the indexer — it will re-index from block 0.
 
+For Base Sepolia, prefer resetting `indexer_state` to the deployment `START_BLOCK` from `ops/.env.testnet` rather than re-indexing from genesis. The hosted deployment currently starts at block `41977999`.
+
 ## Rotate Keys
 
 ### Solver Key
 
 1. Stop the solver: `kill $(cat ops/solver.pid)`
 2. Update `SOLVER_PRIVATE_KEY` in `ops/.env.deployed`
-3. Fund the new solver address on the L2
+3. Fund the new solver address on the target network
 4. Restart: `make services`
 
 ### Agent Key
@@ -116,6 +118,13 @@ The deployer key has no special privileges after deployment. Rotation is not nee
 
 ```bash
 curl http://localhost:3001/health
+```
+
+Hosted API:
+
+```bash
+curl https://api.cortex.wallyweb.com/health
+curl https://api.cortex.wallyweb.com/analytics/commerce
 ```
 
 ### Check Service Processes

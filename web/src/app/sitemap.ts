@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export const dynamic = "force-static";
 
-const BASE_URL = "https://cortex.dev";
+const BASE_URL = "https://cortex.wallyweb.com";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [

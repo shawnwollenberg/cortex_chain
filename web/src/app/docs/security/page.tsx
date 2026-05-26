@@ -51,16 +51,18 @@ export default function SecurityPage() {
     <div>
       <h1 className="text-3xl font-bold mb-4">Security</h1>
       <p className="text-muted mb-10">
-        Threat model and security analysis for the Cortex agent-native L2. Covers MVP-level risks, mitigations, and assumptions.
+        Threat model and security analysis for Cortex as a Base-native agentic commerce protocol.
+        Covers protocol, policy, commerce, and offchain service risks.
       </p>
 
       {/* 1. Bridge */}
-      <h2 className="text-xl font-semibold mb-4">1. Bridge / Rollup Risks</h2>
+      <h2 className="text-xl font-semibold mb-4">1. Base / L2 Dependency Risks</h2>
       <ThreatTable rows={[
-        { threat: "Bridge exploit (token drain)", severity: "Critical", mitigation: "OP Stack canonical bridge; rely on L1 security. Monitor bridge balances." },
-        { threat: "Sequencer censorship", severity: "High", mitigation: "OP Stack forced inclusion via L1. Agents can submit L1 fallback txs." },
-        { threat: "Sequencer liveness failure", severity: "High", mitigation: "OP Stack permissionless proposer upgrade path." },
+        { threat: "Bridge exploit (token drain)", severity: "Critical", mitigation: "Prefer native Base assets and canonical bridges. Monitor bridge and stablecoin issuer risk." },
+        { threat: "Sequencer censorship", severity: "High", mitigation: "Base inherits OP Stack forced inclusion paths. Agents and merchants should retry or use alternate rails when degraded." },
+        { threat: "Sequencer liveness failure", severity: "High", mitigation: "Document operational fallback and pause guidance for services that need timely settlement." },
         { threat: "Data availability gap", severity: "Medium", mitigation: "L1 calldata/blobs ensure state reconstructability." },
+        { threat: "Public RPC range limits", severity: "Medium", mitigation: "Indexer chunks log polling below Base Sepolia RPC limits and checkpoints progress." },
       ]} />
 
       {/* 2. Intent */}
@@ -85,7 +87,7 @@ export default function SecurityPage() {
       {/* 3. Solver */}
       <h2 className="text-xl font-semibold mb-4 mt-10">3. Solver Censorship or Abuse</h2>
       <ThreatTable rows={[
-        { threat: "Solver censorship", severity: "Medium", mitigation: "MVP: single trusted solver. Future: permissionless solver set." },
+        { threat: "Solver censorship", severity: "Medium", mitigation: "Permissionless solver registration and indexed fill quality reduce reliance on one solver." },
         { threat: "Solver MEV extraction", severity: "Medium", mitigation: "Constraint enforcement on-chain (amountInMax/amountOutMin)." },
         { threat: "Solver griefing", severity: "Low", mitigation: "Fill constraints checked on-chain. Invalid fills revert." },
         { threat: "Solver downtime", severity: "Medium", mitigation: "Intents remain OPEN until deadline. Agents can cancel and resubmit." },
@@ -95,11 +97,12 @@ export default function SecurityPage() {
       <h2 className="text-xl font-semibold mb-4 mt-10">4. Policy Bypass Patterns</h2>
       <ThreatTable rows={[
         { threat: "delegatecall to untrusted contract", severity: "High", mitigation: "PolicyAccount restricts execution to call only." },
-        { threat: "approve + transferFrom bypass", severity: "Medium", mitigation: "Spend limits track msg.value. Token approvals require target allowlist." },
+        { threat: "approve + transferFrom bypass", severity: "Medium", mitigation: "ERC-20 transfer, approve, and transferFrom calldata is detected and charged against token limits." },
         { threat: "Spend limit race (multi-tx)", severity: "Low", mitigation: "recordSpend() uses storage-level cumulative tracking." },
         { threat: "Rolling window manipulation", severity: "Low", mitigation: "Window resets after 24h. Cannot be shortened by the account." },
         { threat: "Target allowlist bypass via proxy", severity: "Medium", mitigation: "Allowlist checks direct target address." },
         { threat: "Function selector collision", severity: "Low", mitigation: "4-byte selectors practically safe for known interfaces." },
+        { threat: "Signed payment replay", severity: "High", mitigation: "Signed payment recording enforces merchant/token/facilitator budgets and payment-hash replay protection." },
       ]} />
       <div className="rounded-lg border border-border bg-surface p-4 mb-6 text-sm">
         <p className="font-semibold mb-2">Invariants verified by fuzz/invariant tests:</p>
@@ -129,12 +132,24 @@ export default function SecurityPage() {
       ]} />
 
       {/* 7. Offchain */}
-      <h2 className="text-xl font-semibold mb-4 mt-10">7. Offchain Service Risks</h2>
+      <h2 className="text-xl font-semibold mb-4 mt-10">7. Commerce Risks</h2>
+      <ThreatTable rows={[
+        { threat: "Fake merchant or cloned service", severity: "High", mitigation: "Merchant, service, and facilitator records are anchored onchain with metadata hashes." },
+        { threat: "Quote replay", severity: "High", mitigation: "Quote hashes bind chain ID, registry address, merchant, service, agent, token, rail, nonce, terms, resource, x402 payload, and fees." },
+        { threat: "Payment payload substitution", severity: "High", mitigation: "x402 payloads bind through x402PayloadHash; other rails bind through terms/resource hashes plus account policy." },
+        { threat: "Merchant non-fulfillment", severity: "Medium", mitigation: "Receipts, fulfillment hashes, disputes, and trust signals create a shared risk trail." },
+        { threat: "Refund abuse by agents", severity: "Medium", mitigation: "Dispute and trust-signal history is indexed for agents and merchants." },
+        { threat: "Privacy leakage in metadata", severity: "Medium", mitigation: "Keep sensitive prompts, URLs, payloads, and business intent out of public metadata." },
+      ]} />
+
+      {/* 8. Offchain */}
+      <h2 className="text-xl font-semibold mb-4 mt-10">8. Offchain Service Risks</h2>
       <ThreatTable rows={[
         { threat: "Indexer data desync", severity: "Medium", mitigation: "Tracks lastProcessedBlock. Resumes from checkpoint." },
         { threat: "API injection (SQL)", severity: "High", mitigation: "All queries use parameterized statements ($1, $2)." },
         { threat: "API denial of service", severity: "Medium", mitigation: "Pagination limits (max 100). No unbounded queries." },
         { threat: "Database corruption", severity: "Medium", mitigation: "Postgres WAL + standard backup. Idempotent migrations." },
+        { threat: "Hosted API outage", severity: "Medium", mitigation: "Onchain state remains canonical; agents can fall back to direct RPC/log reads or alternate indexers." },
       ]} />
 
       <h2 className="text-xl font-semibold mb-4 mt-10">Static Analysis</h2>

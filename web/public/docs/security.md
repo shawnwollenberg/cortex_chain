@@ -1,21 +1,22 @@
 # Threat Model
 
-Security analysis for the Agent-Native Ethereum L2. This document covers MVP-level risks, mitigations, and assumptions.
+Security analysis for Cortex as a Base-native agentic commerce protocol. This document covers MVP-level risks, mitigations, and assumptions.
 
-## 1. Bridge / Rollup Risks
+## 1. Base / L2 Dependency Risks
 
-**Risk:** As an L2, the system inherits bridge and sequencer trust assumptions from the rollup framework.
+**Risk:** Cortex currently runs as contracts and services on Base/Base Sepolia, so it inherits network, sequencer, RPC, bridge, and stablecoin assumptions from the underlying L2 rather than operating its own chain.
 
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
-| Bridge exploit (token drain) | Critical | OP Stack canonical bridge; rely on L1 security. Monitor bridge balances. |
-| Sequencer censorship | High | OP Stack forced inclusion via L1. Agents can submit L1 fallback txs. |
-| Sequencer liveness failure | High | OP Stack permissionless proposer upgrade path. Document manual override procedure. |
+| Bridge exploit (token drain) | Critical | Prefer native Base assets and canonical bridges. Monitor bridge and stablecoin issuer risk. |
+| Sequencer censorship | High | Base inherits OP Stack forced inclusion paths. Agents and merchants should retry or use alternate rails when liveness is degraded. |
+| Sequencer liveness failure | High | Document operational fallback and pause guidance for services that depend on timely settlement. |
 | Data availability gap | Medium | L1 calldata/blobs ensure state reconstructability. |
+| Public RPC range limits | Medium | Indexer chunks log polling below Base Sepolia RPC range limits and checkpoints progress. |
 
 **Assumptions:**
-- We deploy on OP Stack (or Base/OP Sepolia) which inherits Ethereum L1 security guarantees.
-- The canonical bridge is the only supported deposit/withdrawal path for MVP.
+- We deploy protocol contracts on Base or Base Sepolia.
+- We are not running a custom rollup yet; bridge and sequencer risks are inherited from the host network.
 
 ## 2. Intent Manipulation / Replay
 
@@ -41,14 +42,14 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
-| Solver censorship | Medium | MVP: single trusted solver. Future: permissionless solver set with reputation. |
+| Solver censorship | Medium | Permissionless solver registration and indexed solver reputation reduce reliance on one solver, but offchain discovery still matters. |
 | Solver MEV extraction | Medium | Constraint enforcement on-chain (amountInMax/amountOutMin). Solver cannot exceed bounds. |
 | Solver griefing (fill with bad data) | Low | Fill constraints checked on-chain. Invalid fills revert. |
 | Solver downtime | Medium | Intents remain OPEN until deadline. Agents can cancel and resubmit. |
 
 **Assumptions:**
-- MVP uses a single, trusted solver operated by the team.
-- MEV protection (encrypted mempools, batch auctions) is deferred to post-MVP.
+- MEV protection (encrypted mempools, batch auctions) is deferred.
+- Agents should evaluate solver metadata, bids, execution commitments, and indexed fill quality before selection.
 
 ## 4. Policy Bypass Patterns
 
@@ -57,11 +58,12 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
 | `delegatecall` to untrusted contract | High | PolicyAccount restricts execution to `call` only. `delegatecall` is not exposed. |
-| `approve` + `transferFrom` bypass | Medium | Spend limits track `msg.value` (ETH) via `checkTransaction`. Token approvals require target allowlist. |
+| `approve` + `transferFrom` bypass | Medium | ERC-20 transfer, approve, and transferFrom calldata is detected and charged against token spend limits. Token approvals also require target/function policy. |
 | Spend limit race (multi-tx in same block) | Low | `recordSpend()` uses storage-level cumulative tracking. Multiple calls in one block accumulate correctly. |
 | Rolling window manipulation | Low | Window resets after 24h from `lastResetTimestamp`. Cannot be shortened by the account. |
 | Target allowlist bypass via proxy | Medium | Allowlist checks the direct `target` address. Proxied targets must be explicitly allowlisted. |
 | Function selector collision | Low | 4-byte selectors have collision potential but are practically safe for known interfaces. |
+| Signed payment replay | High | `recordSignedPayment` enforces merchant/token/facilitator policy, per-payment and daily limits, and payment-hash replay protection. |
 
 **Invariants verified by fuzz/invariant tests:**
 - `spentToday` never exceeds peak `maxPerDay` (`invariant_spentNeverExceedsPeakMax`)
@@ -93,7 +95,18 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 | Storage collision | Low | No upgradeable proxies in MVP. Direct deployment. |
 | Uninitialized state | Low | All mappings default to zero/false. Logic handles zero gracefully. |
 
-## 7. Offchain Service Risks
+## 7. Commerce Risks
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Fake merchant or cloned service | High | Merchant, service, and facilitator records are anchored onchain with metadata hashes. Agents should verify service metadata and trust signals. |
+| Quote replay across chains or registries | High | `CommerceRegistry.computeQuoteHash` binds chain ID, registry address, merchant, service, agent, token, facilitator, amount, rail, nonce, resource hash, terms hash, x402 payload hash, and fee terms. |
+| Payment payload substitution | High | x402 payloads bind through `x402PayloadHash`; transfer, swap, and facilitator details bind through terms/resource hashes plus account policy. |
+| Merchant non-fulfillment | Medium | Receipts, fulfillment hashes, disputes, and trust signals create a shared risk trail. |
+| Refund abuse by agents | Medium | Dispute and trust-signal history is indexed for agents and merchants. |
+| Privacy leakage in metadata | Medium | Keep sensitive prompts, URLs, payloads, and business intent out of public metadata; use hashes and redacted offchain documents. |
+
+## 8. Offchain Service Risks
 
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
@@ -101,6 +114,7 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 | API injection (SQL) | High | All queries use parameterized statements (`$1`, `$2`). No string interpolation. |
 | API denial of service | Medium | Pagination limits (max 100). No unbounded queries. |
 | Database corruption | Medium | Postgres WAL + standard backup procedures. Indexer migrations are idempotent. |
+| Hosted API outage | Medium | Onchain state remains canonical; agents can fall back to direct RPC/log reads or alternate indexers. |
 
 ## Static Analysis
 

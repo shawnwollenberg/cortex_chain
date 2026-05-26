@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Docs — Cortex",
-  description: "Developer documentation for the Cortex agent-native Ethereum L2.",
+  description: "Developer documentation for the Cortex Base-native agentic commerce protocol.",
   alternates: {
     types: { "text/markdown": "/docs/getting-started.md" },
   },
@@ -23,12 +23,12 @@ const SECTIONS = [
   {
     title: "Contracts",
     href: "/docs/contracts",
-    description: "AgentRegistry, IntentBook, PolicyModule, and PolicyAccount reference.",
+    description: "Identity, policy, intent, participant, attestation, and commerce contract reference.",
   },
   {
     title: "REST API",
     href: "/docs/api",
-    description: "Endpoints for agents, intents, policies, and transaction explanations.",
+    description: "Endpoints for agents, intents, policies, commerce, analytics, and transaction explanations.",
   },
   {
     title: "MCP Server",
@@ -52,8 +52,9 @@ export default function DocsHome() {
     <div>
       <h1 className="text-3xl font-bold mb-4">Documentation</h1>
       <p className="text-muted mb-10 max-w-2xl">
-        Cortex is an EVM-compatible Layer 2 designed for AI agents. These docs cover
-        the full stack: smart contracts, offchain services, APIs, and local development.
+        Cortex is a Base-native protocol for agentic commerce. These docs cover
+        the full stack: smart contracts, merchant and service discovery, payment policy,
+        quote commitments, receipts, disputes, offchain services, APIs, and deployment.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">

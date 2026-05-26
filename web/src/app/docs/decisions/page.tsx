@@ -9,10 +9,10 @@ export const metadata: Metadata = {
 const DECISIONS = [
   {
     id: 1,
-    title: "OP Stack as Rollup Framework",
-    decision: "Target OP Stack (Base/OP Sepolia) for deployment.",
-    rationale: "Most mature general-purpose L2 framework. Shared sequencer and bridge infrastructure. Large developer ecosystem. Forced inclusion via L1 for censorship resistance.",
-    tradeoff: "Less customizable than building a custom rollup. Sufficient for MVP.",
+    title: "Base-First Protocol Deployment",
+    decision: "Deploy Cortex first as protocol contracts and services on Base/Base Sepolia rather than launching a new chain immediately.",
+    rationale: "Base already has stablecoins, ERC-20 liquidity, wallets, explorers, developer distribution, and a credible path for agentic commerce adoption.",
+    tradeoff: "Less control over execution, sequencing, and fee markets than a custom rollup. The same primitives can become predeploys or chain-native modules later.",
   },
   {
     id: 2,
@@ -47,14 +47,14 @@ const DECISIONS = [
     title: "PolicyModule as Separate Contract",
     decision: "Keep PolicyModule as a standalone contract rather than embedding logic in PolicyAccount.",
     rationale: "Multiple accounts can share the same PolicyModule. Policies are upgradeable independently of account code. Cleaner separation of concerns.",
-    tradeoff: "Extra call overhead for policy checks. Negligible on L2.",
+    tradeoff: "Extra call overhead for policy checks. Negligible on Base for the current usage profile.",
   },
   {
     id: 7,
-    title: "Single Trusted Solver (MVP)",
-    decision: "Run one solver instance operated by the team.",
-    rationale: "Simplest path to a working demo. Permissionless solver registration adds complexity (reputation, staking, slashing) without MVP value.",
-    tradeoff: "Centralization risk. Documented in threat model. Future: permissionless solver set.",
+    title: "Permissionless Solver Registry, Hosted Solver First",
+    decision: "Support permissionless solver registration and indexed solver quality, while still allowing an initial hosted solver for demos and early testnet flows.",
+    rationale: "Agents need visible solver metadata, bids, bonds, and performance counters before trusting automated execution.",
+    tradeoff: "Real production solver markets still need stronger incentives, monitoring, and potentially slashing or dispute mechanisms.",
   },
   {
     id: 8,

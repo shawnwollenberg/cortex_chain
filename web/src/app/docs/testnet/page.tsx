@@ -15,6 +15,39 @@ export default function TestnetDeployPage() {
         Deploy the full Cortex stack (contracts + offchain services) to a public testnet.
       </p>
 
+      <div className="mb-10 rounded-lg border border-border bg-surface p-5">
+        <h2 className="text-xl font-semibold mb-3">Current Hosted Deployment</h2>
+        <div className="grid gap-2 text-sm text-muted">
+          <p>Frontend: <code>https://cortex.wallyweb.com</code></p>
+          <p>API: <code>https://api.cortex.wallyweb.com</code></p>
+          <p>Network: Base Sepolia, chain ID <code>84532</code></p>
+          <p>Indexer start block: <code>41977999</code></p>
+        </div>
+      </div>
+
+      <h2 className="text-xl font-semibold mb-4">Live Contract Addresses</h2>
+      <div className="overflow-x-auto mb-10">
+        <table className="w-full text-sm">
+          <thead><tr className="border-b border-border text-left text-muted"><th className="pb-3 pr-4">Contract</th><th className="pb-3">Base Sepolia Address</th></tr></thead>
+          <tbody className="divide-y divide-border">
+            {[
+              ["AgentRegistry", "0x9e2b846226539e93669e66c7478304910dcbaa61"],
+              ["IntentBook", "0xea1db573f299a3f064ffd306b309179ff0542e8c"],
+              ["PolicyModule", "0x8f14e12177c7baf8d389629210c3c82718205fd1"],
+              ["AttestationRegistry", "0xefe648ecf2615e09ddf89ec5f1cf36dbb462e84a"],
+              ["SolverRegistry", "0xbc62d0aff03e5e87553eec0b9eeb59da27f0dea2"],
+              ["AttestorRegistry", "0xbe00be1f56e3315cdbec8fa72d7962d931dc83f1"],
+              ["CommerceRegistry", "0x378c1d1a06e80f7a53809bf4289afcd131a3be87"],
+            ].map(([name, address]) => (
+              <tr key={name}>
+                <td className="py-2 pr-4 font-medium">{name}</td>
+                <td className="py-2 font-mono text-xs">{address}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <p className="text-sm text-muted mb-6">
         <strong>Recommended testnet:</strong> Base Sepolia &mdash; an OP Stack L2 with fast blocks (~2s), free faucets, and a good block explorer.
       </p>
@@ -82,38 +115,35 @@ AGENT_PRIVATE_KEY=0x<your-agent-private-key>`}</CodeBlock>
         Copy the connection string and update <code>DATABASE_URL</code> in <code>ops/.env.testnet</code>.
       </p>
 
-      <h2 className="text-xl font-semibold mb-4">5. Run Migrations</h2>
+      <h2 className="text-xl font-semibold mb-4">5. Start Services Locally</h2>
       <CodeBlock language="bash">{`source ops/.env.testnet
-for file in indexer/migrations/*.sql; do
-  psql "$DATABASE_URL" -f "$file"
-done`}</CodeBlock>
+ENV_FILE=ops/.env.testnet ./ops/start-services.sh`}</CodeBlock>
       <p className="text-sm text-muted mt-3 mb-8">
-        Creates the identity, intent, policy, attestation, participant, commerce, quote, receipt,
-        dispute, and analytics source tables.
+        Builds services, runs idempotent migrations, and starts the indexer, solver, and API.
       </p>
 
-      <h2 className="text-xl font-semibold mb-4">6. Start Services</h2>
+      <h2 className="text-xl font-semibold mb-4">6. Manual Service Commands</h2>
       <p className="text-sm text-muted mb-4">
         Source the testnet env and start each service:
       </p>
       <CodeBlock language="bash">{`source ops/.env.testnet
 
 # Indexer — polls Base Sepolia for events, writes to Postgres
-cd indexer && npm run build && node dist/index.js
+cd indexer && npm run build && node dist/src/index.js
 
 # Solver — watches IntentSubmitted, simulates, fills
-cd solver && npm run build && node dist/index.js
+cd solver && npm run build && node dist/src/index.js
 
 # API — REST server on port 3001
-cd api && npm run build && node dist/index.js`}</CodeBlock>
+cd api && npm run build && node dist/src/index.js`}</CodeBlock>
       <p className="text-sm text-muted mt-3 mb-4">
         Or as background processes:
       </p>
       <CodeBlock language="bash">{`source ops/.env.testnet
 
-cd indexer && npm run build && nohup node dist/index.js > ../ops/indexer.log 2>&1 &
-cd ../solver && npm run build && nohup node dist/index.js > ../ops/solver.log 2>&1 &
-cd ../api && npm run build && nohup node dist/index.js > ../ops/api.log 2>&1 &`}</CodeBlock>
+cd indexer && npm run build && nohup node dist/src/index.js > ../ops/indexer.log 2>&1 &
+cd ../solver && npm run build && nohup node dist/src/index.js > ../ops/solver.log 2>&1 &
+cd ../api && npm run build && nohup node dist/src/index.js > ../ops/api.log 2>&1 &`}</CodeBlock>
 
       <h2 className="text-xl font-semibold mb-4 mt-10">7. Verify</h2>
       <h3 className="text-lg font-semibold mb-2">Check the block explorer</h3>
@@ -132,12 +162,40 @@ curl http://localhost:3001/agents?owner=0x00000000000000000000000000000000000000
 # List open intents
 curl http://localhost:3001/intents?status=open`}</CodeBlock>
 
+      <p className="text-sm text-muted mt-3 mb-4">Hosted API checks:</p>
+      <CodeBlock language="bash">{`curl https://api.cortex.wallyweb.com/health
+curl https://api.cortex.wallyweb.com/analytics/commerce`}</CodeBlock>
+
       <h3 className="text-lg font-semibold mb-2 mt-6">Start the dashboard</h3>
       <CodeBlock language="bash">{`cd web
 NEXT_PUBLIC_API_URL=http://localhost:3001 npm run dev`}</CodeBlock>
       <p className="text-sm text-muted mt-3 mb-8">
         Open <code>http://localhost:3000/dashboard</code>. Protocol fees should show <code>0</code>
         until a future fee switch is intentionally added.
+      </p>
+
+      <p className="text-sm text-muted mb-8">
+        Hosted dashboard: <code>https://cortex.wallyweb.com/dashboard</code>.
+      </p>
+
+      <h2 className="text-xl font-semibold mb-4">8. AWS Deployment</h2>
+      <p className="text-sm text-muted mb-4">
+        The production-shaped testnet deployment uses S3 + CloudFront for the frontend,
+        ECS Fargate for the API and indexer, RDS Postgres, Route53 DNS, ACM certificates,
+        and ECR repositories for images.
+      </p>
+      <CodeBlock language="bash">{`ENV_FILE=ops/.env.testnet ./ops/write-aws-tfvars-from-testnet-env.sh
+
+cd infra/aws
+terraform init
+terraform apply
+
+cd ../..
+AWS_PROFILE=wallyweb AWS_REGION=us-east-1 ./ops/deploy-aws-images.sh
+AWS_PROFILE=wallyweb AWS_REGION=us-east-1 NEXT_PUBLIC_API_URL=https://api.cortex.wallyweb.com ./ops/deploy-aws-web.sh`}</CodeBlock>
+      <p className="text-sm text-muted mt-3 mb-8">
+        If your Terraform binary architecture does not match provider plugins, set <code>TERRAFORM_BIN</code>
+        when running the deployment scripts.
       </p>
 
       <h3 className="text-lg font-semibold mb-2 mt-6">Register a test agent</h3>

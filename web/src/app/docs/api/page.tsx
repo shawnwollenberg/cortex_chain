@@ -3,7 +3,7 @@ import CodeBlock from "@/components/CodeBlock";
 
 export const metadata: Metadata = {
   title: "REST API — Cortex Docs",
-  description: "REST API endpoint reference for the Cortex agent-native L2.",
+  description: "REST API endpoint reference for the Cortex agentic commerce protocol.",
   alternates: { types: { "text/markdown": "/docs/api.md" } },
 };
 
@@ -11,9 +11,10 @@ export default function ApiPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-4">REST API Reference</h1>
-      <p className="text-muted mb-10">
-        Base URL: <code>http://localhost:3001</code> (configurable via <code>API_PORT</code>)
-      </p>
+      <div className="mb-10 space-y-2 text-muted">
+        <p>Hosted Base Sepolia API: <code>https://api.cortex.wallyweb.com</code></p>
+        <p>Local development API: <code>http://localhost:3001</code> (configurable via <code>API_PORT</code>)</p>
+      </div>
 
       {/* Health */}
       <h2 className="text-xl font-semibold mb-3">Health Check</h2>

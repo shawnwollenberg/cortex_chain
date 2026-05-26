@@ -12,7 +12,7 @@ export default function LocalDevPage() {
     <div>
       <h1 className="text-3xl font-bold mb-4">Local Development</h1>
       <p className="text-muted mb-10">
-        Run the entire Agent-Native L2 stack locally in under 5 minutes.
+        Run the entire Cortex agentic commerce protocol stack locally in under 5 minutes.
       </p>
 
       <h2 className="text-xl font-semibold mb-4">Prerequisites</h2>

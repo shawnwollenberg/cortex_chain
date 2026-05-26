@@ -1,43 +1,37 @@
 # Cortex
 
-An EVM-compatible Layer 2 designed for AI agents. Agents have onchain identity, transact via policy-aware smart accounts (ERC-4337), submit intents that solvers execute, and query machine-readable state through an indexing + API layer.
+A Base-native protocol for agentic commerce. Agents have onchain identity, transact through policy-aware smart accounts, discover merchants and services, accept verifiable quote commitments, record receipts and disputes, and query machine-readable state through an indexing + API layer.
 
 ## Architecture
 
 ```
-Agent Runtime (signs EIP-712 intents, holds private key)
-    |                              |
-    | submitIntent()               | registerAgent()
-    v                              v
-IntentBook                    AgentRegistry
-(EIP-712 + constraints)       (identity + metadata)
-    |                              |
-    | IntentSubmitted event        |
-    v                              |
-Solver                             |
-(watches events, simulates)        |
-    |                              |
-    | fillIntent()                 |
-    v                              v
-PolicyModule (spend limits, target allowlists, function allowlists)
-    |
-    v
-Indexer (polls chain, ingests events -> Postgres)
-    |
-    v
-REST API (/agents, /intents, /accounts, /tx/:hash)
+Agent / Smart Account
+  | identity, delegated budgets, target/function policy, signed payment policy
+  v
+AgentRegistry + PolicyModule + PolicyAccount
+  |
+  | signed intents                         Merchant / Service Operator
+  v                                        | merchant, services, facilitators, quotes
+IntentBook <-> SolverRegistry              v
+  | fills                                  CommerceRegistry
+  |                                        | receipts, fulfillment, disputes, trust signals
+  v                                        |
+AttestorRegistry + AttestationRegistry <---+
+  |
+  v
+Indexer -> Postgres -> REST API / MCP / Dashboard
 ```
 
 ## Repo Layout
 
 ```
-contracts/   Solidity (Foundry): AgentRegistry, PolicyModule, IntentBook, AttestationRegistry
+contracts/   Solidity (Foundry): identity, policy, intent, attestation, solver/attestor, commerce registries
 solver/      TypeScript offchain service: watches intents, simulates, executes fills
 indexer/     Event ingestion into Postgres
 api/         REST API for agent-readable queries
 sdk/         TypeScript SDK for agent intent creation, preflight, and metadata reservation
 mcp/         Model Context Protocol server for AI agent integration
-web/         Documentation website
+web/         Marketing site, documentation, and dashboard
 ops/         Docker Compose, deploy scripts, observability
 docs/        Architecture, threat model, runbooks
 ```
@@ -63,14 +57,23 @@ make down      # stop everything
 
 ## Testnet Deployment (Base Sepolia)
 
+Live services:
+
+- Frontend: <https://cortex.wallyweb.com>
+- API: <https://api.cortex.wallyweb.com>
+- API health: <https://api.cortex.wallyweb.com/health>
+
 Live on Base Sepolia (chain ID 84532):
 
 | Contract | Address |
 |----------|---------|
-| AgentRegistry | [`0x3Aa04083aDA29a77b97e52646C6f0b2B7D24F46d`](https://sepolia.basescan.org/address/0x3Aa04083aDA29a77b97e52646C6f0b2B7D24F46d) |
-| IntentBook | [`0xD1B7Bd65F2aB60ff84CdDF48f306a599b01d293A`](https://sepolia.basescan.org/address/0xD1B7Bd65F2aB60ff84CdDF48f306a599b01d293A) |
-| PolicyModule | [`0xCE621A324A8cb40FD424EB0D41286A97f6a6c91C`](https://sepolia.basescan.org/address/0xCE621A324A8cb40FD424EB0D41286A97f6a6c91C) |
-| AttestationRegistry | [`0x05E1701516B086CEf743cb5BC2c2A821aE848FdC`](https://sepolia.basescan.org/address/0x05E1701516B086CEf743cb5BC2c2A821aE848FdC) |
+| AgentRegistry | [`0x9e2b846226539e93669e66c7478304910dcbaa61`](https://sepolia.basescan.org/address/0x9e2b846226539e93669e66c7478304910dcbaa61) |
+| IntentBook | [`0xea1db573f299a3f064ffd306b309179ff0542e8c`](https://sepolia.basescan.org/address/0xea1db573f299a3f064ffd306b309179ff0542e8c) |
+| PolicyModule | [`0x8f14e12177c7baf8d389629210c3c82718205fd1`](https://sepolia.basescan.org/address/0x8f14e12177c7baf8d389629210c3c82718205fd1) |
+| AttestationRegistry | [`0xefe648ecf2615e09ddf89ec5f1cf36dbb462e84a`](https://sepolia.basescan.org/address/0xefe648ecf2615e09ddf89ec5f1cf36dbb462e84a) |
+| SolverRegistry | [`0xbc62d0aff03e5e87553eec0b9eeb59da27f0dea2`](https://sepolia.basescan.org/address/0xbc62d0aff03e5e87553eec0b9eeb59da27f0dea2) |
+| AttestorRegistry | [`0xbe00be1f56e3315cdbec8fa72d7962d931dc83f1`](https://sepolia.basescan.org/address/0xbe00be1f56e3315cdbec8fa72d7962d931dc83f1) |
+| CommerceRegistry | [`0x378c1d1a06e80f7a53809bf4289afcd131a3be87`](https://sepolia.basescan.org/address/0x378c1d1a06e80f7a53809bf4289afcd131a3be87) |
 
 Deploy your own with:
 
@@ -94,6 +97,7 @@ Built with Foundry and OpenZeppelin. Solidity 0.8.24.
 | `AttestationRegistry` | Signed provenance for offchain inputs |
 | `SolverRegistry` | Permissionless solver metadata, bond, and reputation counters |
 | `AttestorRegistry` | Permissionless attestor metadata and schema support |
+| `CommerceRegistry` | Merchants, services, facilitators, quotes, receipts, fulfillment, trust signals, and disputes |
 
 ```bash
 cd contracts
@@ -110,7 +114,7 @@ All TypeScript, using viem and node-postgres.
 |---------|------|-------------|
 | Indexer | - | Polls chain events, writes to Postgres |
 | Solver | - | Watches intents, simulates, fills |
-| API | 3001 | REST endpoints for agents, intents, policies, tx explain |
+| API | 3001 locally / `https://api.cortex.wallyweb.com` live | REST endpoints for agents, intents, policies, commerce, analytics, tx explain |
 | MCP | stdio | Tools: `lookup_agent`, `list_open_intents`, `get_policy`, `explain_tx`, `list_solvers`, `list_attestors` |
 | SDK | - | Agent client for signed intent creation, policy preflight, and execution metadata reservation |
 
@@ -123,7 +127,8 @@ All TypeScript, using viem and node-postgres.
 | API | Express 4, node-postgres |
 | Database | PostgreSQL 16 |
 | Local dev | Anvil, Docker Compose |
-| Target L2 | OP Stack (Base Sepolia) |
+| Current network | Base Sepolia protocol deployment |
+| Hosted stack | AWS ECS Fargate, RDS Postgres, S3, CloudFront, Route53 |
 
 ## Documentation
 
@@ -133,6 +138,7 @@ All TypeScript, using viem and node-postgres.
 - [Architecture](docs/architecture.md)
 - [Contracts Reference](docs/contracts.md)
 - [REST API Reference](docs/api.md)
+- [Agentic Commerce](docs/agentic-commerce.md)
 - [MCP Server](docs/mcp.md)
 - [Design Decisions](docs/decisions.md)
 - [Protocol Roadmap](docs/protocol-roadmap.md)

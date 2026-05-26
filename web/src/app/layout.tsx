@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   },
   description:
     "A Base-native protocol for agentic commerce: merchant discovery, delegated budgets, payment rails, quote commitments, receipts, disputes, and machine-readable state.",
-  metadataBase: new URL("https://cortex.dev"),
+  metadataBase: new URL("https://cortex.wallyweb.com"),
   icons: [{ rel: "icon", url: "/favicon.svg", type: "image/svg+xml" }],
   openGraph: {
     type: "website",
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
       "A Base-native protocol for agentic commerce: merchant discovery, delegated budgets, payment rails, quote commitments, receipts, disputes, and machine-readable state.",
   },
   alternates: {
-    canonical: "https://cortex.dev",
+    canonical: "https://cortex.wallyweb.com",
   },
   other: {
     "ai-content-declaration": "This site documents an agentic commerce protocol. Machine-readable documentation is available at /llms.txt and /llms-full.txt. Markdown docs are served at /docs/*.md.",
@@ -42,8 +42,8 @@ const jsonLd = {
     "A Base-native protocol for agentic commerce. Onchain identity, merchant discovery, policy-aware smart accounts, payment rails, receipts, disputes, and machine-readable state.",
   applicationCategory: "Blockchain",
   operatingSystem: "Cross-platform",
-  url: "https://cortex.dev",
-  documentation: "https://cortex.dev/docs",
+  url: "https://cortex.wallyweb.com",
+  documentation: "https://cortex.wallyweb.com/docs",
   softwareRequirements: "Docker, Foundry, Node.js >= 18",
   programmingLanguage: ["Solidity", "TypeScript"],
   offers: {

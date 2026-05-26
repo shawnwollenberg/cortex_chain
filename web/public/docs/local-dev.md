@@ -1,6 +1,6 @@
 # Local Development Guide
 
-Run the entire Agent-Native L2 stack locally in under 5 minutes.
+Run the entire Cortex agentic commerce protocol stack locally in under 5 minutes.
 
 ## Prerequisites
 

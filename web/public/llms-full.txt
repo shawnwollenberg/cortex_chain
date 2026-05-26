@@ -1,16 +1,21 @@
+# Cortex Full Documentation
+
 # Getting Started with Cortex
 
-Cortex is an EVM-compatible Layer 2 designed for AI agents. These docs cover the full stack: smart contracts, offchain services, APIs, and local development.
+Cortex is a Base-native protocol for agentic commerce. These docs cover the full stack: smart contracts, merchant and service discovery, payment policy, quote commitments, receipts, disputes, offchain services, APIs, and local development.
 
 ## What is Cortex?
 
-Cortex is an agent-native Ethereum L2 where AI agents have:
+Cortex gives AI agents and merchants:
 
 - **Onchain identity** — Agents register with metadata, pubkeys, and capability hashes via `AgentRegistry`
-- **Policy-aware smart accounts** — ERC-4337 accounts enforcing spend limits, target allowlists, and function-level permissions via `PolicyModule`
+- **Policy-aware smart accounts** — Accounts enforcing spend limits, target allowlists, function-level permissions, session keys, and signed payment budgets via `PolicyModule`
 - **Intent-based execution** — Agents sign EIP-712 intents with constraints; solvers fill them via `IntentBook`
+- **Merchant and service discovery** — Merchants, services, facilitators, and capability hashes are anchored through `CommerceRegistry`
+- **Verifiable commerce records** — Quotes, receipts, fulfillment hashes, disputes, and trust signals are indexed for agents, merchants, and dashboards
+- **Multiple payment rails** — Wallet transfers, ERC-20 transfers, swaps, facilitator-mediated payments, and x402
 - **Machine-readable state** — All events indexed into Postgres, served via REST API and MCP server
-- **Verifiable inputs** — Optional attestation registry for signed provenance of offchain data
+- **Verifiable inputs** — Attestation registry for signed provenance of offchain data
 
 ## Quick Start
 
@@ -27,9 +32,11 @@ This starts Anvil (local EVM), deploys contracts, launches the indexer/solver/AP
 ## Documentation
 
 - [Architecture](/docs/architecture.md) — System diagram, data flow, database schema
-- [Contracts](/docs/contracts.md) — AgentRegistry, IntentBook, PolicyModule, PolicyAccount reference
+- [Contracts](/docs/contracts.md) — Identity, policy, intent, participant, attestation, and commerce reference
 - [REST API](/docs/api.md) — Endpoint reference with example responses
+- [Agentic Commerce](/docs/agentic-commerce.md) — Merchant registry, quote, receipt, dispute, and payment-rail model
 - [Local Development](/docs/local-dev.md) — Step-by-step local dev guide
+- [Testnet Deployment](/docs/testnet-deploy.md) — Current Base Sepolia and AWS deployment guide
 - [MCP Server](/docs/mcp.md) — Model Context Protocol tools for AI agents
 - [Design Decisions](/docs/decisions.md) — Key architectural choices and tradeoffs
 - [Security](/docs/security.md) — Threat model, mitigations, and invariants
@@ -42,73 +49,141 @@ This starts Anvil (local EVM), deploys contracts, launches the indexer/solver/AP
 | Solver | TypeScript, viem, node-postgres |
 | Indexer | TypeScript, viem, node-postgres |
 | API | TypeScript, Express 4, node-postgres |
+| Dashboard/docs | Next.js, React, Tailwind |
 | Database | PostgreSQL 16 |
 | Local dev | Anvil (Foundry), Docker Compose |
+| Hosted testnet | Base Sepolia, AWS ECS/RDS/S3/CloudFront |
 
 
 ---
 
 # Architecture
 
-Cortex is a vertically integrated stack of onchain contracts and offchain services.
+Cortex is a Base-native protocol for agentic commerce. The core system is a set of onchain contracts plus offchain services that make the state easy for agents, dashboards, and marketplaces to query.
 
 ## System Diagram
 
-```
-Agent Runtime (signs EIP-712 intents, holds private key)
-    │                              │
-    │ submitIntent()               │ registerAgent()
-    ▼                              ▼
-IntentBook                    AgentRegistry
-(EIP-712 + constraints)       (identity + metadata)
-    │                              │
-    │ IntentSubmitted event        │
-    ▼                              │
-Solver                             │
-(watches events, simulates)        │
-    │                              │
-    │ fillIntent()                 │
-    ▼                              ▼
-PolicyModule (spend limits, target allowlists, function allowlists)
-    │
-    ▼
-Indexer (polls chain, ingests events → Postgres)
-    │
-    ▼
-Postgres (agents, intents, fills, policies, tx_receipts)
-    │
-    ▼
-REST API (/agents, /intents, /accounts, /tx/:hash)
+```text
+Agent / Smart Account
+  | registers identity
+  | configures spend, target, swap, facilitator, and x402 policies
+  | signs intents or payment authorizations
+  v
+AgentRegistry + PolicyModule + PolicyAccount
+  | identity, delegated budgets, target/function checks, session keys
+  v
+IntentBook <---------------- SolverRegistry
+  | signed intents              | solver metadata, bonds, quality counters
+  | selected bids               |
+  | fills                       v
+  +-----------------------> Solver service
+
+Merchant / Service Operator
+  | registers merchant, services, facilitators
+  | commits quotes
+  v
+CommerceRegistry
+  | merchants
+  | services
+  | facilitators
+  | quote commitments
+  | receipts
+  | fulfillment attestations
+  | trust signals
+  | disputes
+  | zero-fee protocol instrumentation
+
+AttestorRegistry + AttestationRegistry
+  | attestor metadata
+  | schema-based provenance and safety signals
+
+All contract events
+  v
+Indexer -> Postgres -> REST API / MCP / Dashboard
 ```
 
-## Data Flow
+## Core Flows
 
-1. **Agent registers** → calls `AgentRegistry.registerAgent()` → emits `AgentRegistered`
-2. **Agent configures policies** → calls `PolicyModule.setSpendLimit()`, `setTargetAllowed()` → emits policy events
-3. **Agent signs intent** → EIP-712 typed data (domain: "AgentIntentBook", version "1", chainId, verifyingContract)
-4. **Agent submits intent** → calls `IntentBook.submitIntent(intent, v, r, s)` → validates signature + constraints → emits `IntentSubmitted`
-5. **Solver watches** → polls for `IntentSubmitted` events → validates constraints → simulates via `eth_call` → calls `IntentBook.fillIntent()` → emits `IntentFilled`
-6. **Indexer ingests** → polls all contract events → writes to Postgres tables (agents, intents, fills, policies, tx_receipts)
-7. **API serves** → queries Postgres → returns JSON to agents or frontends
+### Agent Identity and Policy
+
+1. Agent owner registers an agent in `AgentRegistry`.
+2. Owner configures `PolicyModule` rules for native transfers, ERC-20 transfers/approvals, swaps, allowed targets, function selectors, session keys, and signed payment budgets.
+3. `PolicyAccount` checks policy before execution and records spend.
+4. Signed payment policies cover facilitator-mediated and x402-style authorizations with merchant, token, facilitator, per-payment, daily-budget, and replay checks.
+
+### Intent Execution
+
+1. Agent signs an EIP-712 intent for `IntentBook`.
+2. Solver submits a bid and the agent selects it.
+3. Solver fills the intent only if the selected bid, solver, execution commitment, amounts, deadline, and optional attestation requirements match.
+4. Fill events update indexed solver quality metrics and transaction explanations.
+
+### Commerce
+
+1. Merchant registers a merchant record and one or more services in `CommerceRegistry`.
+2. Service metadata points to a machine-readable catalog with capabilities, payment rails, input/output schemas, SLA, refund, privacy, and attestation requirements.
+3. Agent checks service state and account policy before accepting terms.
+4. Merchant commits a quote binding merchant, service, agent, token, facilitator/payment rail, amount, expiry, payment nonce, resource hash, terms hash, optional x402 payload hash, and protocol fee terms.
+5. Payment can happen through wallet-to-wallet transfer, ERC-20 transfer, swap, facilitator-mediated settlement, or x402.
+6. Receipt records settlement, payment rail, result/resource hashes, and optional fulfillment hash.
+7. Merchants or facilitators can add fulfillment attestations to receipts.
+8. Any participant can record verification, risk, compliance, or fulfillment trust signals for merchants, services, facilitators, and agents.
+9. Disputes can be opened and resolved against receipts, creating reputation and risk signals for both agents and merchants.
+
+## Payment Rails
+
+Cortex is not x402-only.
+
+- **Basic transfers:** native or ERC-20 wallet-to-wallet payments governed by spend limits and target/function policies.
+- **Swaps:** DEX/router calls governed by target allowlists, selector allowlists, spend limits, and intent constraints.
+- **Facilitator-mediated payments:** delegated payment flows where a facilitator settles on behalf of an authorization.
+- **x402:** web-native payment acceptance, bound into quote commitments through `x402PayloadHash` when used.
 
 ## Contract Architecture
 
 | Contract | Purpose | Key Feature |
 |----------|---------|-------------|
-| `AgentRegistry` | Agent identity | Stores owner, metadataURI, pubkey, capabilitiesHash |
-| `IntentBook` | Intent lifecycle | EIP-712 signing, nonce replay protection, constraint enforcement |
-| `PolicyModule` | Policy enforcement | Daily spend limits, target allowlist, function selector allowlist |
-| `PolicyAccount` | ERC-4337 account | Delegates validation to PolicyModule, signature verification |
+| `AgentRegistry` | Agent identity | Owner, metadata URI, pubkey, capabilities hash |
+| `PolicyModule` | Policy enforcement | Spend limits, target/function allowlists, signed payment policy, replay protection |
+| `PolicyAccount` | Smart account | Policy-gated execution, session keys, guardian freeze |
+| `IntentBook` | Intent lifecycle | EIP-712 intents, selected bids, solver fill enforcement |
+| `SolverRegistry` | Solver discovery | Operator metadata, bond, fill quality counters |
+| `AttestorRegistry` | Attestor discovery | Operator metadata and schema support |
+| `AttestationRegistry` | Provenance | Schema-based attestations and revocation |
+| `CommerceRegistry` | Agentic commerce | Merchants, services, facilitators, quotes, receipts, fulfillment, trust signals, disputes |
+| `DemoTarget` | Local demo | Simple executable target for e2e testing |
 
-## Database Schema
+## Indexed Data
 
-| Table | Indexed From | Key Columns |
-|-------|-------------|-------------|
-| `agents` | `AgentRegistered`, `AgentUpdated`, `AgentRevoked` | agent_id, owner, metadata_uri, revoked |
-| `intents` | `IntentSubmitted`, `IntentCancelled` | intent_id, owner, status, input_token, output_token |
-| `fills` | `IntentFilled` | intent_id, solver, amount_in, amount_out |
-| `policies` | `SpendLimitSet`, `TargetAllowlistUpdated`, `FunctionAllowlistUpdated` | account, policy_type, token/target |
-| `tx_receipts` | All transactions | tx_hash, block_number, events (JSONB) |
+| Table | Indexed From | Purpose |
+|-------|-------------|---------|
+| `agents` | Agent registry events | Agent identity and owner lookups |
+| `intents` | Intent events | Intent state, constraints, status |
+| `solver_bids` | Bid events and API helper | Bid market inspection |
+| `fills` | Fill events | Solver fills, result hashes, trace hashes |
+| `policies` | Policy events | Account spend, allowlist, and signed payment policy state |
+| `solvers` | Solver registry and fill events | Solver metadata and performance metrics |
+| `attestors` | Attestor registry events | Attestor metadata and counters |
+| `attestation_schemas` | API/bootstrap data | Machine-readable schema discovery |
+| `merchants` | Commerce registry events | Merchant discovery and payout context |
+| `services` | Commerce registry events | Service discovery and capability lookup |
+| `facilitators` | Commerce registry events | Payment facilitator discovery |
+| `quotes` | Quote events | Canonical quote/payment terms and fee instrumentation |
+| `commerce_receipts` | Receipt and fulfillment events | Settled commerce records and fulfillment hashes |
+| `disputes` | Dispute events | Refund/dispute/reputation signals |
+| `trust_signals` | Trust signal events | Verification, risk, compliance, and fulfillment signals |
+| `tx_receipts` | All decoded transactions | Human and machine transaction explanations |
+
+## API, MCP, and Dashboard
+
+- REST API exposes indexed state for agents and frontends.
+- MCP tools expose selected API functionality to model-driven agents.
+- Dashboard reads `/analytics/commerce`, merchant/service discovery, receipts, and disputes.
+- Analytics include volume, settled volume, payment rail mix, zero-fee protocol fee fields, dispute counts, trust signal counts, and facilitator/merchant/service leaderboards.
+
+## Deployment Shape
+
+The current path is protocol-first on Base or Base Sepolia. This keeps existing stablecoins, ERC-20 liquidity, wallets, explorers, and developer tooling available from day one. If agentic commerce activity later justifies deeper execution changes, the same primitives can become predeploys or chain-native modules.
 
 ## Technology Stack
 
@@ -116,17 +191,14 @@ REST API (/agents, /intents, /accounts, /tx/:hash)
 - **Solver:** TypeScript, viem, node-postgres
 - **Indexer:** TypeScript, viem, node-postgres
 - **API:** TypeScript, Express 4, node-postgres
+- **Dashboard/docs:** Next.js, React, Tailwind
 - **Database:** PostgreSQL 16
-- **Local dev:** Anvil (Foundry), Docker Compose
+- **Local dev:** Anvil, Docker Compose
 
 
 ---
 
 # Contracts Reference
-
-Four core contracts make up the onchain layer: AgentRegistry, IntentBook, PolicyModule, and PolicyAccount.
-
----
 
 ## AgentRegistry
 
@@ -238,12 +310,19 @@ Enforces per-account policies: spend limits, target allowlists, function selecto
 | `setTargetAllowed(target, allowed)` | Account | Add/remove target from allowlist. |
 | `setFunctionAllowed(target, selector, allowed)` | Account | Allow/disallow a function selector on a target. |
 | `setUseFunctionAllowlist(enabled)` | Account | Enable/disable function-level checks. |
+| `setGuardian(guardian)` | Account | Configure a guardian that can freeze/unfreeze the account. |
+| `setAccountFrozen(account, frozen)` | Account or guardian | Freeze/unfreeze account execution. |
 | `checkTransaction(target, value, data)` | View | Validate a transaction against all policies. |
 | `recordSpend(token, amount)` | Account | Record spending against daily limit. |
+| `getTokenSpend(target, data)` | Pure | Detect ERC-20 `transfer`, `approve`, and `transferFrom` spend from calldata. |
 | `getSpendLimit(account, token)` | View | Get spend limit config. |
 | `getSpentToday(account, token)` | View | Get amount spent in current 24h window. |
 | `isTargetAllowed(account, target)` | View | Check if target is on allowlist. |
 | `isFunctionAllowed(account, target, selector)` | View | Check if function is allowed on target. |
+| `guardianOf(account)` | View | Get the configured guardian. |
+| `isAccountFrozen(account)` | View | Check whether account execution is frozen. |
+| `setSignedPaymentPolicy(merchant, token, facilitator, maxPerPayment, maxPerDay, allowed)` | Account | Configure facilitator/x402-style delegated payment budgets. |
+| `recordSignedPayment(merchant, token, facilitator, amount, paymentHash)` | Account | Record a signed payment against policy and replay protection. |
 
 ### Events
 
@@ -251,17 +330,26 @@ Enforces per-account policies: spend limits, target allowlists, function selecto
 event SpendLimitSet(address indexed account, address indexed token, uint256 maxPerDay);
 event TargetAllowlistUpdated(address indexed account, address indexed target, bool allowed);
 event FunctionAllowlistUpdated(address indexed account, address indexed target, bytes4 selector, bool allowed);
+event FunctionAllowlistModeUpdated(address indexed account, bool enabled);
 event SpendRecorded(address indexed account, address indexed token, uint256 amount, uint256 dailyTotal);
+event GuardianSet(address indexed account, address indexed guardian);
+event AccountFrozen(address indexed account, bool frozen);
+event SignedPaymentPolicySet(address indexed account, address indexed merchant, address indexed token, address facilitator, uint256 maxPerPayment, uint256 maxPerDay, bool allowed);
+event SignedPaymentRecorded(address indexed account, address indexed merchant, address indexed token, address facilitator, uint256 amount, bytes32 paymentHash, uint256 dailyTotal);
 ```
 
 ### Errors
 
 ```solidity
 error Unauthorized();
+error AccountFrozenError(address account);
 error TargetNotAllowed(address target);
 error FunctionNotAllowed(address target, bytes4 selector);
 error DailySpendLimitExceeded(address token, uint256 attempted, uint256 remaining);
 error DelegateCallNotAllowed();
+error PaymentNotAllowed(address merchant, address token, address facilitator);
+error PaymentLimitExceeded(address token, uint256 attempted, uint256 maxPerPayment);
+error PaymentAlreadyRecorded(bytes32 paymentHash);
 ```
 
 ### Spend Limit Mechanics
@@ -271,6 +359,9 @@ error DelegateCallNotAllowed();
 - `maxPerDay = 0` means no limit configured (allows freely)
 - Limits are per-account, per-token
 - `address(0)` represents native ETH
+- ERC-20 `transfer`, `approve`, and `transferFrom` amounts are detected from calldata and charged against the token target's spend limit.
+- Signed payment policies support facilitator-mediated and x402-style payments where the account signs an authorization that may settle later.
+- Basic wallet-to-wallet transfers and swaps are handled through normal target/function allowlists plus spend limits.
 
 ---
 
@@ -283,16 +374,136 @@ Smart account that delegates policy validation to PolicyModule.
 | Function | Access | Description |
 |----------|--------|-------------|
 | `execute(target, value, data)` | EntryPoint or self | Execute a call after policy check. |
+| `executeWithSessionKey(target, value, data, deadline, nonce, signature)` | Anyone with session-key signature | Execute through an active, unexpired session key. Still enforces account policy. |
 | `validateUserOp(userOp, userOpHash, missingAccountFunds)` | EntryPoint only | Validate ERC-4337 UserOp signature. |
+| `setSessionKey(sessionKey, expiresAt, active)` | EntryPoint or self | Add, update, or revoke a scoped session key. |
+| `setGuardian(guardian)` | EntryPoint or self | Configure account guardian. |
+| `setAccountFrozen(frozen)` | EntryPoint or self | Freeze/unfreeze this account. |
 
-The account checks `PolicyModule.checkTransaction()` before executing any call and records ETH spend via `PolicyModule.recordSpend()`.
+The account checks `PolicyModule.checkTransaction()` before executing any call and records native ETH plus detected ERC-20 spend via `PolicyModule.recordSpend()`.
+
+Session-key execution signs `address(this)`, `chainId`, target, value, calldata hash, deadline, and nonce. Nonces are tracked per session key to prevent replay, and policies are still enforced before the call.
+
+---
+
+## SolverRegistry
+
+Permissionless registry for solver operators.
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `registerSolver(metadataURI, capabilitiesHash)` | Anyone | Register a solver. Accepts optional ETH bond. |
+| `updateSolver(solverId, metadataURI, capabilitiesHash, active)` | Operator only | Update metadata/capabilities and active status. |
+| `addBond(solverId)` | Operator only | Add ETH bond. |
+| `withdrawBond(solverId, amount)` | Operator only, inactive | Withdraw bond after deactivation. |
+| `getSolver(solverId)` | View | Get solver record. |
+| `getSolverByOperator(operator)` | View | Resolve operator to solver ID. |
+
+### Events
+
+```solidity
+event SolverRegistered(uint256 indexed solverId, address indexed operator, string metadataURI, bytes32 capabilitiesHash, uint256 bond);
+event SolverUpdated(uint256 indexed solverId, string metadataURI, bytes32 capabilitiesHash, bool active);
+event SolverBondChanged(uint256 indexed solverId, uint256 bond);
+```
+
+---
+
+## AttestorRegistry
+
+Permissionless registry for attestors and supported schema metadata.
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `registerAttestor(metadataURI, schemasHash)` | Anyone | Register an attestor operator. |
+| `updateAttestor(attestorId, metadataURI, schemasHash, active)` | Operator only | Update metadata/schemas and active status. |
+| `getAttestor(attestorId)` | View | Get attestor record. |
+| `getAttestorByOperator(operator)` | View | Resolve operator to attestor ID. |
+
+### Events
+
+```solidity
+event AttestorRegistered(uint256 indexed attestorId, address indexed operator, string metadataURI, bytes32 schemasHash);
+event AttestorUpdated(uint256 indexed attestorId, string metadataURI, bytes32 schemasHash, bool active);
+```
+
+---
+
+## CommerceRegistry
+
+Registers merchants, services, payment facilitators, quote commitments, receipts, and disputes for agentic commerce.
+
+### Quote Commitment
+
+```solidity
+struct QuoteCommitment {
+    uint256 merchantId;
+    uint256 serviceNumericId;
+    address agent;
+    address token;
+    address facilitator;
+    uint256 amount;
+    PaymentRail paymentRail;
+    uint256 expiresAt;
+    uint256 paymentNonce;
+    bytes32 resourceHash;
+    bytes32 termsHash;
+    bytes32 x402PayloadHash;
+}
+```
+
+`x402PayloadHash` is used for x402 payments. Other payment rails can bind transfer, swap, or facilitator details through the quote's terms and resource hashes while still using normal account policies.
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `registerMerchant(payoutAddress, metadataURI, metadataHash)` | Anyone | Register a merchant owner and payout address. |
+| `updateMerchant(merchantId, payoutAddress, metadataURI, metadataHash, active)` | Merchant owner | Update merchant metadata and active status. |
+| `registerService(merchantId, serviceId, metadataURI, metadataHash, capabilityHash)` | Merchant owner | Register a machine-readable service. |
+| `updateService(serviceNumericId, metadataURI, metadataHash, capabilityHash, active)` | Merchant owner | Update service metadata/capabilities and active status. |
+| `registerFacilitator(facilitator, metadataURI, metadataHash)` | Anyone | Register or refresh a facilitator address. |
+| `updateFacilitator(facilitatorId, metadataURI, metadataHash, active)` | Facilitator address | Update facilitator metadata and active status. |
+| `commitQuote(commitment)` | Merchant owner | Commit a canonical quote hash. Requires active facilitator. |
+| `recordReceipt(quoteHash, resultHash)` | Quote facilitator | Mark quote settled and emit receipt. |
+| `recordFulfillment(receiptId, fulfillmentHash)` | Merchant owner or facilitator | Attach a fulfillment attestation hash to a receipt. |
+| `recordTrustSignal(subjectType, subjectId, kind, signalHash)` | Anyone | Record verification, risk, compliance, or fulfillment signal metadata. |
+| `openDispute(receiptId, reasonHash)` | Agent, merchant, or facilitator | Open a receipt-linked dispute. |
+| `resolveDispute(disputeId, status, resolutionHash)` | Merchant or facilitator | Resolve or reject an open dispute. |
+| `computeQuoteHash(...)` | View | Compute the canonical quote hash. |
+| `PROTOCOL_FEE_BPS()` | View | Current protocol fee bps. Currently `0`. |
+
+### Events
+
+```solidity
+event MerchantRegistered(uint256 indexed merchantId, address indexed owner, address indexed payoutAddress, string metadataURI, bytes32 metadataHash);
+event ServiceRegistered(uint256 indexed serviceNumericId, uint256 indexed merchantId, string serviceId, string metadataURI, bytes32 metadataHash, bytes32 capabilityHash);
+event FacilitatorRegistered(uint256 indexed facilitatorId, address indexed facilitator, string metadataURI, bytes32 metadataHash);
+event QuoteCommitted(bytes32 indexed quoteHash, uint256 indexed merchantId, uint256 indexed serviceNumericId, address agent, address token, address facilitator, uint256 amount, PaymentRail paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, uint256 expiresAt, uint256 paymentNonce, bytes32 resourceHash, bytes32 termsHash, bytes32 x402PayloadHash);
+event ReceiptRecorded(uint256 indexed receiptId, bytes32 indexed quoteHash, address indexed agent, uint256 merchantId, uint256 serviceNumericId, address token, uint256 amount, PaymentRail paymentRail, uint16 protocolFeeBps, uint256 protocolFeeAmount, address facilitator, bytes32 resultHash, bytes32 resourceHash, bytes32 fulfillmentHash);
+event FulfillmentRecorded(uint256 indexed receiptId, bytes32 fulfillmentHash);
+event TrustSignalRecorded(uint256 indexed signalId, SignalSubject indexed subjectType, uint256 indexed subjectId, SignalKind kind, address reporter, bytes32 signalHash);
+event DisputeOpened(uint256 indexed disputeId, uint256 indexed receiptId, address indexed opener, bytes32 reasonHash);
+event DisputeResolved(uint256 indexed disputeId, DisputeStatus status, bytes32 resolutionHash);
+```
+
+Quote hashes bind chain ID, registry address, service terms, payment terms, and zero-fee protocol terms. Protocol fee fields are emitted and indexed for analytics but currently remain zero.
 
 
 ---
 
 # REST API Reference
 
-Base URL: `http://localhost:3001` (configurable via `API_PORT`)
+Base URLs:
+
+- Hosted Base Sepolia API: `https://api.cortex.wallyweb.com`
+- Local development API: `http://localhost:3001` (configurable via `API_PORT`)
+
+The hosted API currently indexes the live Base Sepolia deployment. Local development uses the same routes against your local Postgres/indexer stack.
 
 ## Endpoints
 
@@ -409,6 +620,52 @@ Errors: `400` (invalid status)
 
 ---
 
+#### Set Intent Metadata
+
+```
+PUT /intents/:id/metadata
+```
+
+Stores offchain execution/provenance metadata for an indexed intent.
+
+Request:
+```json
+{
+  "execution_target": "0x...",
+  "execution_data": "0x...",
+  "required_attestation_subject": "0x...",
+  "required_attestation_schema": "0x..."
+}
+```
+
+All fields are optional. The solver uses this metadata when `API_URL` is configured.
+
+---
+
+#### Reserve Intent Metadata
+
+```
+POST /intents/metadata
+```
+
+Stores execution metadata before the onchain submit is indexed. The SDK computes `intent_hash`, reserves metadata, submits the signed intent, and the indexer links the reserved metadata to the final `intent_id`.
+
+Request:
+```json
+{
+  "intent_hash": "0x...",
+  "owner": "0x...",
+  "execution_target": "0x...",
+  "execution_data": "0x...",
+  "required_attestation_subject": "0x...",
+  "required_attestation_schema": "0x..."
+}
+```
+
+Response `201`: pending metadata row.
+
+---
+
 ### Policies
 
 #### Get Account Policies
@@ -440,6 +697,281 @@ Response `200`:
 ```
 
 Errors: `400` (invalid address)
+
+---
+
+### Policy Preflight
+
+```
+POST /preflight
+```
+
+Checks indexed account policies before an agent signs or submits a transaction.
+
+Request:
+```json
+{
+  "account": "0x...",
+  "target": "0x...",
+  "value": "0",
+  "data": "0x"
+}
+```
+
+Response:
+```json
+{
+  "allowed": true,
+  "action": "ERC20 transfer from 0x...",
+  "reasons": [],
+  "missing_policies": [],
+  "spend_checks": [],
+  "required_policy_updates": []
+}
+```
+
+---
+
+### Solver Bids
+
+Bid commitment and selection are onchain through `IntentBook.submitBid` and `IntentBook.selectBid`. The API mirrors indexed bid events so agents can inspect the market without scanning logs themselves.
+
+#### Create Bid
+
+```
+POST /intents/:id/bids
+```
+
+Legacy/development helper for inserting an offchain bid row. Production solver bids should use the onchain `IntentBook.submitBid` function.
+
+Request:
+```json
+{
+  "solver": "0x...",
+  "amount_in": "1000",
+  "amount_out": "950",
+  "fee": "5",
+  "valid_until": "1779633720",
+  "execution_plan": { "route": "demo" }
+}
+```
+
+#### List Bids
+
+```
+GET /intents/:id/bids?status=open
+```
+
+Bids are ordered best-first by output amount, input amount, fee, then creation order.
+
+#### Select Bid
+
+```
+POST /bids/:bidId/select
+```
+
+Legacy/development helper for selecting an offchain bid row. Production selection should use the onchain `IntentBook.selectBid(intentId, chainBidId)` function. When a bid is selected onchain, `IntentBook.fillIntent` enforces the selected solver and exact bid amounts.
+
+---
+
+### Attestation Schemas
+
+```
+GET /attestations/schemas
+GET /attestations/schemas/:schemaHash
+POST /attestations/schemas
+```
+
+Built-in schemas include `solver_reputation`, `tool_capability`, `model_provider`, and `safety_review`.
+
+---
+
+### Solvers
+
+#### Get Solver
+
+```
+GET /solvers/:id
+```
+
+Returns solver operator, metadata, capabilities hash, bond, active status, fill counters, average latency blocks, and average output surplus.
+
+#### List Solvers
+
+```
+GET /solvers?active=true&operator=0x...&limit=50&offset=0
+```
+
+Both filters are optional.
+
+---
+
+### Attestors
+
+#### Get Attestor
+
+```
+GET /attestors/:id
+```
+
+Returns attestor operator, metadata, schema hash, active status, and indexed attestation counters.
+
+#### List Attestors
+
+```
+GET /attestors?active=true&operator=0x...&limit=50&offset=0
+```
+
+Both filters are optional.
+
+---
+
+### Commerce
+
+#### List Merchants
+
+```
+GET /merchants?owner=0x...&active=true&limit=50&offset=0
+```
+
+Filters are optional. Returns registered merchant owners, payout addresses, metadata URIs/hashes, active status, and block metadata.
+
+#### Get Merchant
+
+```
+GET /merchants/:id
+```
+
+Errors: `400` (invalid ID), `404` (not found)
+
+#### List Services
+
+```
+GET /services?merchant_id=1&capability_hash=0x...&active=true&limit=50&offset=0
+```
+
+Filters are optional. Services include merchant ID, service ID, metadata URI/hash, capability hash, and active status.
+
+#### Get Service
+
+```
+GET /services/:id
+```
+
+Errors: `400` (invalid ID), `404` (not found)
+
+#### List Facilitators
+
+```
+GET /facilitators?active=true&limit=50&offset=0
+```
+
+Returns facilitator address, metadata URI/hash, active status, and block metadata.
+
+#### Get Quote
+
+```
+GET /quotes/:quoteHash
+```
+
+Response `200`:
+```json
+{
+  "quote_hash": "0x...",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "agent": "0x...",
+  "token": "0x...",
+  "facilitator": "0x...",
+  "amount": "1000000000000000000",
+  "payment_rail": 3,
+  "protocol_fee_bps": 0,
+  "protocol_fee_amount": "0",
+  "expires_at": "1779652362",
+  "payment_nonce": "1",
+  "resource_hash": "0x...",
+  "terms_hash": "0x...",
+  "x402_payload_hash": "0x...",
+  "settled": true
+}
+```
+
+Payment rails are `0=transfer`, `1=swap`, `2=facilitator`, and `3=x402`. The `x402_payload_hash` is used when the payment rail is x402. For basic transfers or swaps, quote terms can bind the payment data through the resource/terms hashes and normal policy checks.
+
+#### List Receipts
+
+```
+GET /receipts?agent=0x...&merchant_id=1&limit=50&offset=0
+```
+
+Returns settled commerce receipts with amount, token, payment rail, facilitator, result hash, resource hash, fulfillment hash, and zero-fee protocol instrumentation.
+
+#### Get Merchant Reputation
+
+```
+GET /merchants/:id/reputation
+```
+
+Returns merchant details plus receipt count, settled volume, fulfilled receipt count, dispute counts, and trust signal counts grouped by kind.
+
+#### List Trust Signals
+
+```
+GET /trust-signals?subject_type=0&subject_id=1&kind=0&reporter=0x...&limit=50&offset=0
+```
+
+Trust signal subject types are `0=merchant`, `1=service`, `2=facilitator`, and `3=agent`. Kinds are `0=verification`, `1=risk`, `2=compliance`, and `3=fulfillment`.
+
+#### List Disputes
+
+```
+GET /disputes?receipt_id=1&limit=50&offset=0
+```
+
+Returns receipt-linked dispute status, opener, reason hash, resolution hash, and block metadata.
+
+---
+
+### Commerce Analytics
+
+```
+GET /analytics/commerce
+```
+
+Returns dashboard-ready protocol metrics.
+
+Response `200`:
+```json
+{
+  "summary": {
+    "merchants": "1",
+    "active_merchants": "1",
+    "services": "1",
+    "active_services": "1",
+    "facilitators": "1",
+    "active_facilitators": "1",
+    "quotes": "1",
+    "settled_quotes": "1",
+    "quoted_volume": "1000000000000000000",
+    "quoted_protocol_fees": "0",
+    "receipts": "1",
+    "settled_volume": "1000000000000000000",
+    "settled_protocol_fees": "0",
+    "disputes": "1",
+    "open_disputes": "0",
+    "resolved_disputes": "1",
+    "rejected_disputes": "0"
+  },
+  "volume_by_token": [],
+  "top_merchants": [],
+  "top_services": [],
+  "facilitator_volume": [],
+  "volume_by_payment_rail": [],
+  "trust_signals_by_kind": []
+}
+```
+
+Protocol fee fields are currently instrumented but set to zero by `CommerceRegistry.PROTOCOL_FEE_BPS`.
 
 ---
 
@@ -489,9 +1021,73 @@ Errors: `400` (invalid hash), `404` (not found)
 
 ---
 
+# Agentic Commerce Primitives
+
+This project currently targets Base as a protocol layer rather than a new chain. The commerce model keeps trust anchors onchain and leaves rich discovery metadata offchain.
+
+## Onchain Primitives
+
+- `CommerceRegistry`
+  - Merchants: owner, payout address, metadata URI/hash, active status.
+  - Services: merchant-owned service id, metadata URI/hash, capability hash, active status.
+  - Facilitators: facilitator address, metadata URI/hash, active status.
+  - Quote commitments: canonical quote hash, merchant, service, agent, token, facilitator, explicit payment rail, amount, zero-fee protocol terms, expiry, payment nonce, resource hash, terms hash, and optional x402 payload hash.
+  - Receipts: quote settlement receipt with payment rail, result/resource hashes, fulfillment hash, and zero-fee monetization fields.
+  - Disputes: receipt-linked reason and resolution hashes.
+  - Trust signals: verification, risk, compliance, and fulfillment signals for merchants, services, facilitators, and agents.
+
+- `PolicyModule`
+  - Transaction policies still cover target/function allowlists and token spend limits.
+  - Transaction policies cover basic wallet transfers, ERC-20 transfers/approvals, swaps, and contract calls through target/function allowlists plus spend limits.
+  - Signed payment policies cover facilitator-mediated and x402-style payment authorizations by merchant, token, facilitator, per-payment limit, daily budget, and payment hash replay protection.
+
+## Quote Binding
+
+`CommerceRegistry.computeQuoteHash` binds quote commitments to:
+
+- `block.chainid`
+- `CommerceRegistry` contract address
+- merchant id
+- service id
+- agent address
+- token
+- facilitator
+- amount
+- payment rail
+- expiry
+- payment nonce
+- resource hash
+- terms hash
+- optional x402 payment payload hash
+- protocol fee bps and fee amount
+
+`commitQuote` rejects non-canonical quote hashes. This prevents cross-chain, cross-registry, stale-resource, facilitator-substitution, payment-payload substitution, and fee-term substitution mistakes.
+
+## Monetization Hooks
+
+`CommerceRegistry` currently emits `protocolFeeBps` and `protocolFeeAmount` on quotes and receipts with `PROTOCOL_FEE_BPS = 0`. The fee terms are part of the quote hash, which gives us dashboard and API instrumentation now without charging early merchants or agents. A future fee switch should be introduced as an explicit governance/owner-controlled change, with agents continuing to verify fee terms before signing payment authorizations.
+
+## Offchain Discovery
+
+Merchant and service metadata should be published as JSON at `metadataURI` and verified against `metadataHash`. Directories and marketplaces can index that data for search, but agents should verify merchant, service, facilitator, quote, and payment policy state against Base before signing payment authorizations.
+
+## Current Demo Flow
+
+`make e2e` now exercises:
+
+1. Agent, solver, and attestor registration.
+2. Merchant, service, and facilitator registration.
+3. Spend policy and x402-style signed payment policy setup.
+4. Intent submission, bid selection, solver fill, and fill proof indexing.
+5. Quote commitment, receipt recording, fulfillment recording, trust signal recording, dispute opening, and dispute resolution.
+6. API reads for merchants, services, facilitators, quotes, receipts, disputes, trust signals, reputation, analytics, policies, intents, and bids.
+
+
+---
+
 # Local Development Guide
 
-Run the entire Agent-Native L2 stack locally in under 5 minutes.
+Run the entire Cortex agentic commerce protocol stack locally in under 5 minutes.
 
 ## Prerequisites
 
@@ -517,15 +1113,24 @@ make install
 
 ### 2. Start Infrastructure
 
-Starts Anvil (local EVM on port 8545) and Postgres (port 5433) via Docker Compose.
+Starts Anvil (local EVM on port 8545) and Postgres (port 5433 by default) via Docker Compose.
 
 ```bash
 make up
 ```
 
+If port 5433 is in use, choose another host port and pass the matching database URL through the rest of the flow:
+
+```bash
+POSTGRES_PORT=55433 DATABASE_URL=postgresql://ai_chain:ai_chain@localhost:55433/ai_chain make up
+DATABASE_URL=postgresql://ai_chain:ai_chain@localhost:55433/ai_chain make deploy
+DATABASE_URL=postgresql://ai_chain:ai_chain@localhost:55433/ai_chain API_PORT=3012 make services
+API_PORT=3012 make demo
+```
+
 ### 3. Deploy Contracts
 
-Deploys AgentRegistry, IntentBook, and PolicyModule to the local Anvil chain. Writes contract addresses and well-known Anvil keys to `ops/.env.deployed`.
+Deploys AgentRegistry, IntentBook, PolicyModule, AttestationRegistry, SolverRegistry, AttestorRegistry, and CommerceRegistry to the local Anvil chain. Writes contract addresses and well-known Anvil keys to `ops/.env.deployed`.
 
 ```bash
 make deploy
@@ -542,7 +1147,7 @@ make services
 Services:
 - **Indexer** — polls Anvil for contract events, writes to Postgres
 - **Solver** — watches for open intents, simulates and fills them
-- **API** — REST server on `http://localhost:3000`
+- **API** — REST server on `http://localhost:3001`
 
 Logs are written to `ops/indexer.log`, `ops/solver.log`, `ops/api.log`.
 
@@ -556,10 +1161,12 @@ make demo
 
 The demo:
 1. Registers an agent identity
-2. Sets spend limit and target allowlist policies
-3. Submits an EIP-712 signed swap intent
-4. Waits for the solver to fill the intent
-5. Queries all API endpoints and prints results
+2. Registers solver, attestor, merchant, service, and facilitator records
+3. Sets spend limit, target allowlist, and signed payment policies
+4. Submits an EIP-712 signed swap intent
+5. Waits for the solver to fill the intent
+6. Commits a commerce quote, records a receipt, and resolves a dispute
+7. Queries API endpoints, including commerce analytics, and prints results
 
 ### 6. Tear Down
 
@@ -587,7 +1194,8 @@ make clean   # also remove volumes and generated files
 |---------|------|
 | Anvil (RPC) | 8545 |
 | Postgres | 5433 |
-| REST API | 3000 |
+| REST API | 3001 |
+| Web dashboard | 3000 |
 
 ## Environment
 
@@ -606,119 +1214,370 @@ All services read from `ops/.env.deployed`, which is auto-generated by `make dep
 
 ---
 
+# Testnet Deployment Guide
+
+Deploy the full Cortex stack (contracts + offchain services) to a public testnet.
+
+Current hosted deployment:
+
+- Frontend: `https://cortex.wallyweb.com`
+- API: `https://api.cortex.wallyweb.com`
+- Network: Base Sepolia, chain ID `84532`
+- Indexer start block: `41977999`
+
+| Contract | Address |
+|----------|---------|
+| AgentRegistry | `0x9e2b846226539e93669e66c7478304910dcbaa61` |
+| IntentBook | `0xea1db573f299a3f064ffd306b309179ff0542e8c` |
+| PolicyModule | `0x8f14e12177c7baf8d389629210c3c82718205fd1` |
+| AttestationRegistry | `0xefe648ecf2615e09ddf89ec5f1cf36dbb462e84a` |
+| SolverRegistry | `0xbc62d0aff03e5e87553eec0b9eeb59da27f0dea2` |
+| AttestorRegistry | `0xbe00be1f56e3315cdbec8fa72d7962d931dc83f1` |
+| CommerceRegistry | `0x378c1d1a06e80f7a53809bf4289afcd131a3be87` |
+
+**Recommended testnet:** Base Sepolia — an OP Stack L2 with fast blocks (~2s), free faucets, and a good block explorer.
+
+| | Base Sepolia | OP Sepolia (alternative) |
+|--|--|--|
+| Chain ID | 84532 | 11155420 |
+| RPC | `https://sepolia.base.org` | `https://sepolia.optimism.io` |
+| Explorer | sepolia.basescan.org | sepolia-optimistic.etherscan.io |
+
+---
+
+## Prerequisites
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`)
+- [Node.js](https://nodejs.org/) >= 18
+- PostgreSQL client tools (`psql`)
+- Three wallets (deployer, solver, agent) — each needs testnet ETH
+
+## 1. Get Testnet ETH
+
+Fund your deployer wallet with Base Sepolia ETH from any of these faucets:
+
+- [Alchemy Faucet](https://www.alchemy.com/faucets/base-sepolia) — requires free Alchemy account
+- [Coinbase Developer Platform](https://portal.cdp.coinbase.com/products/faucet) — requires Coinbase account
+- [thirdweb Faucet](https://thirdweb.com/base-sepolia-testnet) — no account required
+
+You'll also need small amounts in the solver and agent wallets for gas.
+
+## 2. Configure Environment
+
+```bash
+cp ops/.env.testnet.example ops/.env.testnet
+```
+
+Edit `ops/.env.testnet` with your values:
+
+```bash
+RPC_URL=https://sepolia.base.org
+DATABASE_URL=postgres://user:pass@host:5432/cortex
+DEPLOYER_KEY=0x<your-deployer-private-key>
+SOLVER_PRIVATE_KEY=0x<your-solver-private-key>
+AGENT_PRIVATE_KEY=0x<your-agent-private-key>
+```
+
+> **Never commit private keys.** The `.env.testnet` file is gitignored.
+
+## 3. Deploy Contracts
+
+```bash
+source ops/.env.testnet
+./ops/deploy-testnet.sh
+```
+
+This deploys AgentRegistry, IntentBook, PolicyModule, AttestationRegistry, SolverRegistry, AttestorRegistry, and CommerceRegistry to Base Sepolia. Contract addresses are written to `ops/.env.testnet`.
+
+Verify on the block explorer:
+
+```bash
+# Print the AgentRegistry address
+grep AGENT_REGISTRY_ADDRESS ops/.env.testnet
+# Visit: https://sepolia.basescan.org/address/<address>
+```
+
+Confirm the commerce address is present before starting the indexer:
+
+```bash
+grep COMMERCE_REGISTRY_ADDRESS ops/.env.testnet
+```
+
+## 4. Set Up Postgres
+
+You need a Postgres instance accessible from wherever you'll run the services. Options:
+
+### Railway (simplest)
+
+1. Create a project at [railway.app](https://railway.app/)
+2. Add a Postgres service
+3. Copy the connection string from the service's **Connect** tab
+4. Update `DATABASE_URL` in `ops/.env.testnet`
+
+### Neon (serverless)
+
+1. Create a project at [neon.tech](https://neon.tech/)
+2. Copy the connection string from the dashboard
+3. Update `DATABASE_URL` in `ops/.env.testnet`
+
+### Supabase
+
+1. Create a project at [supabase.com](https://supabase.com/)
+2. Go to Settings → Database → Connection string (URI)
+3. Update `DATABASE_URL` in `ops/.env.testnet`
+
+## 5. Start Services Locally
+
+```bash
+source ops/.env.testnet
+ENV_FILE=ops/.env.testnet ./ops/start-services.sh
+```
+
+This builds services, runs all idempotent migrations, and starts the indexer, solver, and API.
+
+The service launcher passes `COMMERCE_REGISTRY_ADDRESS` into the indexer so merchant, service, facilitator, quote, receipt, dispute, and fee events are indexed.
+
+## 6. Manual Service Commands
+
+Each service reads from environment variables. Source the testnet env and start them:
+
+```bash
+source ops/.env.testnet
+```
+
+### Indexer
+
+```bash
+cd indexer && npm run build && node dist/src/index.js
+```
+
+The indexer polls Base Sepolia for contract events and writes them to Postgres.
+
+### Solver
+
+```bash
+cd solver && npm run build && node dist/src/index.js
+```
+
+The solver watches for `IntentSubmitted` events, simulates fills, and executes them.
+
+### API
+
+```bash
+cd api && npm run build && node dist/src/index.js
+```
+
+The API serves REST endpoints on port 3001 (configurable via `API_PORT`).
+
+### Running as background processes
+
+```bash
+source ops/.env.testnet
+
+cd indexer && npm run build && nohup node dist/src/index.js > ../ops/indexer.log 2>&1 &
+cd ../solver && npm run build && nohup node dist/src/index.js > ../ops/solver.log 2>&1 &
+cd ../api && npm run build && nohup node dist/src/index.js > ../ops/api.log 2>&1 &
+```
+
+### Deploying to Railway
+
+Railway can host all three services. For each:
+
+1. Create a new service in your Railway project
+2. Connect your Git repo and set the root directory (`indexer/`, `solver/`, or `api/`)
+3. Set the environment variables from `ops/.env.testnet`
+4. Deploy
+
+## 7. Verify
+
+### Check the block explorer
+
+Visit `https://sepolia.basescan.org/address/<AGENT_REGISTRY_ADDRESS>` to confirm the contract is deployed.
+
+### Hit the API
+
+```bash
+# Health check
+curl http://localhost:3001/health
+curl http://localhost:3001/attestations/schemas
+curl http://localhost:3001/analytics/commerce
+
+# List agents (should be empty initially)
+curl http://localhost:3001/agents?owner=0x0000000000000000000000000000000000000000
+
+# List open intents
+curl http://localhost:3001/intents?status=open
+```
+
+For the hosted AWS deployment, use the public API:
+
+```bash
+curl https://api.cortex.wallyweb.com/health
+curl https://api.cortex.wallyweb.com/analytics/commerce
+```
+
+Or run the packaged smoke test:
+
+```bash
+ENV_FILE=ops/.env.testnet ./ops/testnet-smoke.sh
+```
+
+### Start the dashboard
+
+Run the web dashboard against the Base Sepolia API:
+
+```bash
+cd web
+NEXT_PUBLIC_API_URL=http://localhost:3001 npm run dev
+```
+
+Open `http://localhost:3000/dashboard`. The dashboard reads `/analytics/commerce`, merchant/service discovery endpoints, receipts, and disputes. Protocol fees should show `0` until a future fee switch is intentionally added.
+
+For the hosted dashboard, open `https://cortex.wallyweb.com/dashboard`.
+
+For a custom hosted dashboard, set `NEXT_PUBLIC_API_URL` to the public API URL before building or deploying the Next app.
+
+## 8. AWS Deployment
+
+The repository includes Terraform and deployment scripts for the current AWS shape:
+
+- S3 + CloudFront frontend at `cortex.wallyweb.com`
+- ECS Fargate API at `api.cortex.wallyweb.com`
+- ECS Fargate indexer polling Base Sepolia
+- RDS PostgreSQL
+- Route53 DNS and ACM certificates
+- ECR repositories for API and indexer images
+
+After deploying contracts and writing `ops/.env.testnet`, generate Terraform variables:
+
+```bash
+ENV_FILE=ops/.env.testnet ./ops/write-aws-tfvars-from-testnet-env.sh
+```
+
+Then deploy infrastructure and publish images/frontend from `infra/aws` and `ops`:
+
+```bash
+cd infra/aws
+terraform init
+terraform apply
+
+cd ../..
+AWS_PROFILE=wallyweb AWS_REGION=us-east-1 ./ops/deploy-aws-images.sh
+AWS_PROFILE=wallyweb AWS_REGION=us-east-1 NEXT_PUBLIC_API_URL=https://api.cortex.wallyweb.com ./ops/deploy-aws-web.sh
+```
+
+On Apple Silicon, use an ARM64 Terraform binary or set `TERRAFORM_BIN` for the deploy scripts if your system Terraform/provider architecture does not match:
+
+```bash
+TERRAFORM_BIN=/path/to/terraform ./ops/deploy-aws-images.sh
+TERRAFORM_BIN=/path/to/terraform ./ops/deploy-aws-web.sh
+```
+
+### Commerce smoke path
+
+After the contracts and services are live, run the local demo flow against the testnet environment from a funded agent and solver wallet:
+
+```bash
+cp ops/.env.testnet ops/.env.deployed
+cd ops/demo
+npm run build
+node dist/run.js
+```
+
+The demo registers a merchant, service, and facilitator, configures an x402-style payment policy, commits a quote with an x402 payload hash and payment nonce, records a receipt, opens/resolves a dispute, and then verifies the indexed API state. Use this only with funded test wallets because it sends Base Sepolia transactions.
+
+### Register a test agent
+
+```bash
+source ops/.env.testnet
+
+cast send "$AGENT_REGISTRY_ADDRESS" \
+  "registerAgent(string,bytes,bytes32)" \
+  "ipfs://test-agent" \
+  "0xaabb" \
+  "0x0000000000000000000000000000000000000000000000000000000000000001" \
+  --rpc-url "$RPC_URL" \
+  --private-key "$AGENT_PRIVATE_KEY"
+```
+
+Wait a few seconds for the indexer to pick up the event, then query:
+
+```bash
+curl http://localhost:3001/agents/1
+```
+
+---
+
+## Alternative: OP Sepolia
+
+The same steps apply to OP Sepolia. Change:
+
+```bash
+RPC_URL=https://sepolia.optimism.io
+```
+
+The deploy script auto-detects the chain ID. Contract addresses and the block explorer URL will differ:
+
+- Explorer: `https://sepolia-optimistic.etherscan.io/address/<address>`
+
+---
+
+## Troubleshooting
+
+**Deploy fails with "insufficient funds":** Get more testnet ETH from a faucet. Deployment costs ~0.01 ETH on Base Sepolia.
+
+**Indexer not picking up events:** Check that `RPC_URL` and contract addresses in `ops/.env.testnet` match. The indexer may take 5-10 seconds to poll new blocks.
+
+**Solver not filling intents:** Verify `SOLVER_PRIVATE_KEY` has testnet ETH for gas. Check `ops/solver.log` for errors.
+
+**Database connection refused:** Ensure your Postgres instance is publicly accessible (if remote) and the `DATABASE_URL` is correct. Test with `psql "$DATABASE_URL" -c "SELECT 1"`.
+
+
+---
+
 # MCP Server
 
-Cortex includes a Model Context Protocol (MCP) server that exposes chain state as tools for AI agents. The server connects to the same Postgres database as the REST API.
-
-## Server Info
-
-```json
-{
-  "name": "ai-chain",
-  "version": "0.1.0"
-}
-```
+Cortex includes a Model Context Protocol server that exposes chain and indexer state as tools for AI agents.
 
 ## Tools
 
-### lookup_agent
+| Tool | Purpose |
+|------|---------|
+| `lookup_agent` | Look up an agent by ID. |
+| `list_open_intents` | List intents filtered by status. |
+| `get_policy` | Get policies for a smart account. |
+| `explain_tx` | Explain indexed transaction events. |
+| `lookup_attestation` | Look up an attestation by ID. |
+| `list_solvers` | List registered solvers and fill counters. |
+| `list_attestors` | List registered attestors and attestation counters. |
+| `preflight_transaction` | Check indexed policies before signing/submitting a transaction. |
 
-Look up an agent by its numeric ID. Returns owner, metadata, pubkey, capabilities, and revocation status.
+## Local Usage
 
-**Parameters:** `agentId` (number, required)
+Build the server:
 
-**Example:**
-```json
-// Request
-{ "agentId": 1 }
-
-// Response
-{
-  "agent_id": "1",
-  "owner": "0x3c44...",
-  "metadata_uri": "ipfs://agent-meta",
-  "pubkey": "0xaabb",
-  "revoked": false
-}
+```bash
+cd mcp
+npm run build
 ```
 
-### list_open_intents
+Run with:
 
-List intents filtered by status. Defaults to OPEN intents. Returns intent details including tokens, amounts, and deadlines.
-
-**Parameters:** `status` (string, optional: "open" | "filled" | "cancelled"), `limit` (number, optional)
-
-**Example:**
-```json
-// Request
-{ "status": "open", "limit": 10 }
-
-// Response: array of intent objects with owner, tokens, amounts, deadline, nonce
+```bash
+DATABASE_URL=postgresql://ai_chain:ai_chain@localhost:5433/ai_chain node dist/src/index.js
 ```
 
-### get_policy
-
-Get spending policies for a smart account. Returns spend limits, target allowlists, and function allowlists.
-
-**Parameters:** `account` (string, required — Ethereum address)
-
-**Example:**
-```json
-// Request
-{ "account": "0x70997..." }
-
-// Response: spend limits, target allowlists, and function selector allowlists
-```
-
-### explain_tx
-
-Get a human-readable explanation of a transaction. Returns decoded events and a summary of what happened.
-
-**Parameters:** `txHash` (string, required)
-
-**Example:**
-```json
-// Request
-{ "txHash": "0xabc..." }
-
-// Response
-{
-  "summary": "Transaction contained 1 event(s)",
-  "events": [
-    {
-      "eventName": "IntentSubmitted",
-      "description": "Intent #1 submitted by 0x..."
-    }
-  ]
-}
-```
-
-### lookup_attestation
-
-Look up an attestation by its numeric ID. Returns attester, schema, subject, data hash, and revocation status.
-
-**Parameters:** `attestationId` (number, required)
-
-**Example:**
-```json
-// Request
-{ "attestationId": 1 }
-
-// Response: attester, schema, subject, data hash, and revocation status
-```
-
-## Usage
-
-The MCP server runs as a stdio transport. Connect it to any MCP-compatible client (Claude Desktop, Claude Code, etc.) by adding it to your MCP configuration:
+When configuring an MCP client from the repo root, use:
 
 ```json
 {
   "mcpServers": {
     "cortex": {
       "command": "node",
-      "args": ["mcp/dist/index.js"],
+      "args": ["mcp/dist/src/index.js"],
       "env": {
-        "DATABASE_URL": "postgres://user:pass@localhost:5433/cortex"
+        "DATABASE_URL": "postgresql://ai_chain:ai_chain@localhost:5433/ai_chain",
+        "API_URL": "http://localhost:3001"
       }
     }
   }
@@ -732,13 +1591,13 @@ The MCP server runs as a stdio transport. Connect it to any MCP-compatible clien
 
 Log of key architectural and implementation decisions.
 
-## 1. OP Stack as Rollup Framework
+## 1. Base-First Protocol Deployment
 
-**Decision:** Target OP Stack (Base/OP Sepolia) for deployment.
+**Decision:** Deploy Cortex first as protocol contracts and services on Base/Base Sepolia rather than launching a new chain immediately.
 
-**Rationale:** Most mature general-purpose L2 framework. Shared sequencer and bridge infrastructure. Large developer ecosystem. Forced inclusion via L1 for censorship resistance.
+**Rationale:** Base already has stablecoins, ERC-20 liquidity, wallets, explorers, developer distribution, and a credible path for agentic commerce adoption. Starting as a protocol keeps the system useful without requiring new bridged assets.
 
-**Tradeoff:** Less customizable than building a custom rollup. Sufficient for MVP.
+**Tradeoff:** Less control over execution, sequencing, and fee markets than a custom rollup. If agent activity later justifies deeper changes, the same primitives can become predeploys or chain-native modules.
 
 ## 2. Agent Identity as Contract Records (Not NFTs)
 
@@ -778,15 +1637,15 @@ Log of key architectural and implementation decisions.
 
 **Rationale:** Multiple accounts can share the same PolicyModule. Policies are upgradeable independently of account code. Cleaner separation of concerns.
 
-**Tradeoff:** Extra call overhead for policy checks. Negligible on L2.
+**Tradeoff:** Extra call overhead for policy checks. Negligible on Base for the current usage profile.
 
-## 7. Single Trusted Solver (MVP)
+## 7. Permissionless Solver Registry, Hosted Solver First
 
-**Decision:** Run one solver instance operated by the team.
+**Decision:** Support permissionless solver registration and indexed solver quality, while still allowing an initial hosted solver for demos and early testnet flows.
 
-**Rationale:** Simplest path to a working demo. Permissionless solver registration adds complexity (reputation, staking, slashing) without MVP value.
+**Rationale:** Agents need visible solver metadata, bids, bonds, and performance counters before trusting automated execution. A hosted solver keeps the demo path simple without making the protocol single-solver.
 
-**Tradeoff:** Centralization risk. Documented in threat model. Future: permissionless solver set.
+**Tradeoff:** Real production solver markets still need stronger incentives, monitoring, and potentially slashing or dispute mechanisms.
 
 ## 8. Express 4 for API
 
@@ -833,22 +1692,23 @@ Log of key architectural and implementation decisions.
 
 # Threat Model
 
-Security analysis for the Agent-Native Ethereum L2. This document covers MVP-level risks, mitigations, and assumptions.
+Security analysis for Cortex as a Base-native agentic commerce protocol. This document covers MVP-level risks, mitigations, and assumptions.
 
-## 1. Bridge / Rollup Risks
+## 1. Base / L2 Dependency Risks
 
-**Risk:** As an L2, the system inherits bridge and sequencer trust assumptions from the rollup framework.
+**Risk:** Cortex currently runs as contracts and services on Base/Base Sepolia, so it inherits network, sequencer, RPC, bridge, and stablecoin assumptions from the underlying L2 rather than operating its own chain.
 
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
-| Bridge exploit (token drain) | Critical | OP Stack canonical bridge; rely on L1 security. Monitor bridge balances. |
-| Sequencer censorship | High | OP Stack forced inclusion via L1. Agents can submit L1 fallback txs. |
-| Sequencer liveness failure | High | OP Stack permissionless proposer upgrade path. Document manual override procedure. |
+| Bridge exploit (token drain) | Critical | Prefer native Base assets and canonical bridges. Monitor bridge and stablecoin issuer risk. |
+| Sequencer censorship | High | Base inherits OP Stack forced inclusion paths. Agents and merchants should retry or use alternate rails when liveness is degraded. |
+| Sequencer liveness failure | High | Document operational fallback and pause guidance for services that depend on timely settlement. |
 | Data availability gap | Medium | L1 calldata/blobs ensure state reconstructability. |
+| Public RPC range limits | Medium | Indexer chunks log polling below Base Sepolia RPC range limits and checkpoints progress. |
 
 **Assumptions:**
-- We deploy on OP Stack (or Base/OP Sepolia) which inherits Ethereum L1 security guarantees.
-- The canonical bridge is the only supported deposit/withdrawal path for MVP.
+- We deploy protocol contracts on Base or Base Sepolia.
+- We are not running a custom rollup yet; bridge and sequencer risks are inherited from the host network.
 
 ## 2. Intent Manipulation / Replay
 
@@ -874,14 +1734,14 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
-| Solver censorship | Medium | MVP: single trusted solver. Future: permissionless solver set with reputation. |
+| Solver censorship | Medium | Permissionless solver registration and indexed solver reputation reduce reliance on one solver, but offchain discovery still matters. |
 | Solver MEV extraction | Medium | Constraint enforcement on-chain (amountInMax/amountOutMin). Solver cannot exceed bounds. |
 | Solver griefing (fill with bad data) | Low | Fill constraints checked on-chain. Invalid fills revert. |
 | Solver downtime | Medium | Intents remain OPEN until deadline. Agents can cancel and resubmit. |
 
 **Assumptions:**
-- MVP uses a single, trusted solver operated by the team.
-- MEV protection (encrypted mempools, batch auctions) is deferred to post-MVP.
+- MEV protection (encrypted mempools, batch auctions) is deferred.
+- Agents should evaluate solver metadata, bids, execution commitments, and indexed fill quality before selection.
 
 ## 4. Policy Bypass Patterns
 
@@ -890,11 +1750,12 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
 | `delegatecall` to untrusted contract | High | PolicyAccount restricts execution to `call` only. `delegatecall` is not exposed. |
-| `approve` + `transferFrom` bypass | Medium | Spend limits track `msg.value` (ETH) via `checkTransaction`. Token approvals require target allowlist. |
+| `approve` + `transferFrom` bypass | Medium | ERC-20 transfer, approve, and transferFrom calldata is detected and charged against token spend limits. Token approvals also require target/function policy. |
 | Spend limit race (multi-tx in same block) | Low | `recordSpend()` uses storage-level cumulative tracking. Multiple calls in one block accumulate correctly. |
 | Rolling window manipulation | Low | Window resets after 24h from `lastResetTimestamp`. Cannot be shortened by the account. |
 | Target allowlist bypass via proxy | Medium | Allowlist checks the direct `target` address. Proxied targets must be explicitly allowlisted. |
 | Function selector collision | Low | 4-byte selectors have collision potential but are practically safe for known interfaces. |
+| Signed payment replay | High | `recordSignedPayment` enforces merchant/token/facilitator policy, per-payment and daily limits, and payment-hash replay protection. |
 
 **Invariants verified by fuzz/invariant tests:**
 - `spentToday` never exceeds peak `maxPerDay` (`invariant_spentNeverExceedsPeakMax`)
@@ -926,7 +1787,18 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 | Storage collision | Low | No upgradeable proxies in MVP. Direct deployment. |
 | Uninitialized state | Low | All mappings default to zero/false. Logic handles zero gracefully. |
 
-## 7. Offchain Service Risks
+## 7. Commerce Risks
+
+| Threat | Severity | Mitigation |
+|--------|----------|------------|
+| Fake merchant or cloned service | High | Merchant, service, and facilitator records are anchored onchain with metadata hashes. Agents should verify service metadata and trust signals. |
+| Quote replay across chains or registries | High | `CommerceRegistry.computeQuoteHash` binds chain ID, registry address, merchant, service, agent, token, facilitator, amount, rail, nonce, resource hash, terms hash, x402 payload hash, and fee terms. |
+| Payment payload substitution | High | x402 payloads bind through `x402PayloadHash`; transfer, swap, and facilitator details bind through terms/resource hashes plus account policy. |
+| Merchant non-fulfillment | Medium | Receipts, fulfillment hashes, disputes, and trust signals create a shared risk trail. |
+| Refund abuse by agents | Medium | Dispute and trust-signal history is indexed for agents and merchants. |
+| Privacy leakage in metadata | Medium | Keep sensitive prompts, URLs, payloads, and business intent out of public metadata; use hashes and redacted offchain documents. |
+
+## 8. Offchain Service Risks
 
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
@@ -934,6 +1806,7 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 | API injection (SQL) | High | All queries use parameterized statements (`$1`, `$2`). No string interpolation. |
 | API denial of service | Medium | Pagination limits (max 100). No unbounded queries. |
 | Database corruption | Medium | Postgres WAL + standard backup procedures. Indexer migrations are idempotent. |
+| Hosted API outage | Medium | Onchain state remains canonical; agents can fall back to direct RPC/log reads or alternate indexers. |
 
 ## Static Analysis
 
@@ -942,95 +1815,3 @@ Security analysis for the Agent-Native Ethereum L2. This document covers MVP-lev
 - **Forge fmt** ensures consistent formatting.
 - Fuzz tests run 1,000 iterations per property.
 - Invariant tests run 256 sequences of 64 calls each.
-
-
----
-
-# Testnet Deployment Guide
-
-Deploy the full Cortex stack (contracts + offchain services) to a public testnet.
-
-**Recommended testnet:** Base Sepolia — an OP Stack L2 with fast blocks (~2s), free faucets, and a good block explorer.
-
-| | Base Sepolia | OP Sepolia (alternative) |
-|--|--|--|
-| Chain ID | 84532 | 11155420 |
-| RPC | `https://sepolia.base.org` | `https://sepolia.optimism.io` |
-| Explorer | sepolia.basescan.org | sepolia-optimistic.etherscan.io |
-
-## Prerequisites
-
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`)
-- [Node.js](https://nodejs.org/) >= 18
-- PostgreSQL client tools (`psql`)
-- Three wallets (deployer, solver, agent) — each needs testnet ETH
-
-## 1. Get Testnet ETH
-
-Fund your deployer wallet with Base Sepolia ETH from any of these faucets:
-
-- [Alchemy Faucet](https://www.alchemy.com/faucets/base-sepolia) — requires free Alchemy account
-- [Coinbase Developer Platform](https://portal.cdp.coinbase.com/products/faucet) — requires Coinbase account
-- [thirdweb Faucet](https://thirdweb.com/base-sepolia-testnet) — no account required
-
-## 2. Configure Environment
-
-```bash
-cp ops/.env.testnet.example ops/.env.testnet
-```
-
-Edit `ops/.env.testnet`:
-
-```bash
-RPC_URL=https://sepolia.base.org
-DATABASE_URL=postgres://user:pass@host:5432/cortex
-DEPLOYER_KEY=0x<your-deployer-private-key>
-SOLVER_PRIVATE_KEY=0x<your-solver-private-key>
-AGENT_PRIVATE_KEY=0x<your-agent-private-key>
-```
-
-## 3. Deploy Contracts
-
-```bash
-source ops/.env.testnet
-./ops/deploy-testnet.sh
-```
-
-Deploys AgentRegistry, IntentBook, PolicyModule, and AttestationRegistry. Contract addresses are written to `ops/.env.testnet`.
-
-## 4. Set Up Postgres
-
-Options: [Railway](https://railway.app/), [Neon](https://neon.tech/), [Supabase](https://supabase.com/). Copy the connection string and update `DATABASE_URL`.
-
-## 5. Run Migrations
-
-```bash
-source ops/.env.testnet
-psql "$DATABASE_URL" -f indexer/migrations/001_init.sql
-```
-
-## 6. Start Services
-
-```bash
-source ops/.env.testnet
-
-# Indexer
-cd indexer && npm run build && node dist/index.js
-
-# Solver
-cd solver && npm run build && node dist/index.js
-
-# API
-cd api && npm run build && node dist/index.js
-```
-
-## 7. Verify
-
-```bash
-curl http://localhost:3001/health
-curl http://localhost:3001/agents?owner=0x0000000000000000000000000000000000000000
-```
-
-## Alternative: OP Sepolia
-
-Same steps. Set `RPC_URL=https://sepolia.optimism.io`. The deploy script auto-detects chain ID.

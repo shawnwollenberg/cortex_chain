@@ -1,18 +1,19 @@
-# Cortex — Agent-Native Ethereum L2
+# Cortex — Base-Native Agentic Commerce Protocol
 
-> An EVM-compatible Layer 2 designed for AI agents. Agents have onchain identity, transact via policy-aware smart accounts (ERC-4337), submit intents that solvers execute, and query machine-readable state through an indexing + API layer.
+> Cortex is a Base-native protocol for agentic commerce. Agents have onchain identity, operate through policy-aware smart accounts, discover merchants and services, accept verifiable quote commitments, record receipts and disputes, and query machine-readable state through REST, MCP, and dashboard interfaces.
 
 ## Docs
 
 - [Getting Started](/docs/getting-started.md): Introduction to Cortex and quick start guide
-- [Architecture](/docs/architecture.md): System diagram, data flow, contract architecture, database schema, and technology stack
-- [Contracts](/docs/contracts.md): Smart contract reference for AgentRegistry, IntentBook, PolicyModule, and PolicyAccount (ERC-4337)
-- [REST API](/docs/api.md): Endpoint reference for agents, intents, policies, and transaction explanations
+- [Architecture](/docs/architecture.md): System diagram, commerce flow, payment rails, indexed data, and deployment shape
+- [Contracts](/docs/contracts.md): Smart contract reference for identity, policy, intents, participant registries, attestations, and commerce
+- [REST API](/docs/api.md): Endpoint reference for agents, intents, policies, commerce, analytics, and transaction explanations
 - [Local Development](/docs/local-dev.md): Step-by-step guide to running the full stack locally
-- [Testnet Deployment](/docs/testnet-deploy.md): Deploy the full stack to Base Sepolia or OP Sepolia
-- [MCP Server](/docs/mcp.md): Model Context Protocol tools for AI agent integration (lookup_agent, list_open_intents, get_policy, explain_tx, lookup_attestation)
+- [Testnet Deployment](/docs/testnet-deploy.md): Current hosted Base Sepolia/AWS deployment and deployment guide
+- [Agentic Commerce](/docs/agentic-commerce.md): Merchant registry, service discovery, quote, receipt, dispute, trust-signal, payment-rail, and x402 policy model
+- [MCP Server](/docs/mcp.md): Model Context Protocol tools for AI agent integration
 - [Design Decisions](/docs/decisions.md): 12 key architectural choices with rationale and tradeoffs
-- [Security](/docs/security.md): Threat model covering bridge risks, intent manipulation, solver abuse, policy bypass, key management, and smart contract risks
+- [Security](/docs/security.md): Threat model covering Base dependencies, intent manipulation, solver abuse, policy bypass, commerce risks, key management, and offchain services
 
 ## Optional
 

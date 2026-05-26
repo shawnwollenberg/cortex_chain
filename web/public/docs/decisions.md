@@ -2,13 +2,13 @@
 
 Log of key architectural and implementation decisions.
 
-## 1. OP Stack as Rollup Framework
+## 1. Base-First Protocol Deployment
 
-**Decision:** Target OP Stack (Base/OP Sepolia) for deployment.
+**Decision:** Deploy Cortex first as protocol contracts and services on Base/Base Sepolia rather than launching a new chain immediately.
 
-**Rationale:** Most mature general-purpose L2 framework. Shared sequencer and bridge infrastructure. Large developer ecosystem. Forced inclusion via L1 for censorship resistance.
+**Rationale:** Base already has stablecoins, ERC-20 liquidity, wallets, explorers, developer distribution, and a credible path for agentic commerce adoption. Starting as a protocol keeps the system useful without requiring new bridged assets.
 
-**Tradeoff:** Less customizable than building a custom rollup. Sufficient for MVP.
+**Tradeoff:** Less control over execution, sequencing, and fee markets than a custom rollup. If agent activity later justifies deeper changes, the same primitives can become predeploys or chain-native modules.
 
 ## 2. Agent Identity as Contract Records (Not NFTs)
 
@@ -48,15 +48,15 @@ Log of key architectural and implementation decisions.
 
 **Rationale:** Multiple accounts can share the same PolicyModule. Policies are upgradeable independently of account code. Cleaner separation of concerns.
 
-**Tradeoff:** Extra call overhead for policy checks. Negligible on L2.
+**Tradeoff:** Extra call overhead for policy checks. Negligible on Base for the current usage profile.
 
-## 7. Single Trusted Solver (MVP)
+## 7. Permissionless Solver Registry, Hosted Solver First
 
-**Decision:** Run one solver instance operated by the team.
+**Decision:** Support permissionless solver registration and indexed solver quality, while still allowing an initial hosted solver for demos and early testnet flows.
 
-**Rationale:** Simplest path to a working demo. Permissionless solver registration adds complexity (reputation, staking, slashing) without MVP value.
+**Rationale:** Agents need visible solver metadata, bids, bonds, and performance counters before trusting automated execution. A hosted solver keeps the demo path simple without making the protocol single-solver.
 
-**Tradeoff:** Centralization risk. Documented in threat model. Future: permissionless solver set.
+**Tradeoff:** Real production solver markets still need stronger incentives, monitoring, and potentially slashing or dispute mechanisms.
 
 ## 8. Express 4 for API
 
