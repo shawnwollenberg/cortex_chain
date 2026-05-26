@@ -104,6 +104,8 @@ type CatalogPublishState = {
   hash: string | null;
 };
 
+type QuotePublishState = CatalogPublishState;
+
 type FieldProps = {
   label: string;
   value: string;
@@ -435,6 +437,44 @@ function CatalogPublishPanel({
   );
 }
 
+function QuotePublishPanel({
+  title,
+  description,
+  state,
+  onPublish,
+}: {
+  title: string;
+  description: string;
+  state: QuotePublishState;
+  onPublish: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onPublish}
+          className="rounded-md border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-muted hover:text-text"
+        >
+          {state.loading ? "Publishing" : "Publish"}
+        </button>
+      </div>
+      {state.error ? <p className="mt-3 text-sm text-red-200">{state.error}</p> : null}
+      {state.uri && state.hash ? (
+        <div className="mt-3 rounded-md border border-border bg-[#090d12] p-3">
+          <p className="text-xs font-medium">Hosted document</p>
+          <p className="mt-2 break-all font-mono text-xs text-muted">{state.uri}</p>
+          <p className="mt-2 break-all font-mono text-xs text-muted">{state.hash}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Checklist({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2 text-sm text-muted">
@@ -466,6 +506,18 @@ export default function OnboardingPage() {
     agentIds: null,
   });
   const [catalogPublish, setCatalogPublish] = useState<CatalogPublishState>({
+    loading: false,
+    error: null,
+    uri: null,
+    hash: null,
+  });
+  const [quoteRequestPublish, setQuoteRequestPublish] = useState<QuotePublishState>({
+    loading: false,
+    error: null,
+    uri: null,
+    hash: null,
+  });
+  const [quoteResponsePublish, setQuoteResponsePublish] = useState<QuotePublishState>({
     loading: false,
     error: null,
     uri: null,
@@ -813,6 +865,22 @@ cast send "$POLICY_MODULE_ADDRESS" \\
     [quoteRequestId, quotePayload, termsDocument, paymentRail, x402Payload],
   );
 
+  const quoteExchangeSummary = JSON.stringify(
+    {
+      quote_request_uri: quoteRequestPublish.uri,
+      quote_request_hash: quoteRequestPublish.hash,
+      quote_response_uri: quoteResponsePublish.uri,
+      quote_response_hash: quoteResponsePublish.hash,
+      verification: [
+        "fetch each URI and recompute keccak256 over the exact response text",
+        "verify merchant and service state before payment",
+        "verify quote payload hashes before commit/payment",
+      ],
+    },
+    null,
+    2,
+  );
+
   const quoteCommand = `// Use viem or cast to compute and commit the same canonical quote.
 // paymentRail: 0=transfer, 1=swap, 2=facilitator, 3=x402
 
@@ -891,6 +959,66 @@ await merchantWallet.writeContract({
       setCatalogPublish({
         loading: false,
         error: error instanceof Error ? error.message : "Catalog publish failed",
+        uri: null,
+        hash: null,
+      });
+    }
+  };
+  const publishQuoteRequest = async () => {
+    setQuoteRequestPublish({ loading: true, error: null, uri: null, hash: null });
+    try {
+      const expectedHash = hashText(quoteRequest);
+      const response = await fetch(`${API_URL}/quote-requests`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          quote_request_json: quoteRequest,
+          expected_hash: expectedHash,
+          request_id: quoteRequestId,
+          merchant_id: merchantId,
+          service_numeric_id: serviceNumericId,
+          service_id: serviceId,
+          agent: quoteAgent,
+        }),
+      });
+      const body = await response.json() as { uri?: string; request_hash?: string; error?: string };
+      if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+      if (!body.uri || !body.request_hash) throw new Error("Quote request publish response was missing uri or request_hash");
+      setQuoteRequestPublish({ loading: false, error: null, uri: body.uri, hash: body.request_hash });
+    } catch (error) {
+      setQuoteRequestPublish({
+        loading: false,
+        error: error instanceof Error ? error.message : "Quote request publish failed",
+        uri: null,
+        hash: null,
+      });
+    }
+  };
+  const publishQuoteResponse = async () => {
+    setQuoteResponsePublish({ loading: true, error: null, uri: null, hash: null });
+    try {
+      const expectedHash = hashText(quoteResponse);
+      const response = await fetch(`${API_URL}/quote-responses`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          quote_response_json: quoteResponse,
+          expected_hash: expectedHash,
+          request_hash: quoteRequestPublish.hash,
+          request_id: quoteRequestId,
+          merchant_id: merchantId,
+          service_numeric_id: serviceNumericId,
+          agent: quoteAgent,
+        }),
+      });
+      const body = await response.json() as { uri?: string; response_hash?: string; error?: string };
+      if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+      if (!body.uri || !body.response_hash) throw new Error("Quote response publish response was missing uri or response_hash");
+      setQuoteResponsePublish({ loading: false, error: null, uri: body.uri, hash: body.response_hash });
+    } catch (error) {
+      setQuoteResponsePublish({
+        loading: false,
+        error: error instanceof Error ? error.message : "Quote response publish failed",
         uri: null,
         hash: null,
       });
@@ -1341,6 +1469,21 @@ cast send "${CONTRACTS.commerceRegistry}" \\
             <div className="grid gap-4">
               <CodePanel title="Agent quote request" value={quoteRequest} />
               <CodePanel title="Merchant quote response" value={quoteResponse} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <QuotePublishPanel
+                  title="Publish quote request"
+                  description="Stores the exact agent request JSON and returns a stable URL for the merchant."
+                  state={quoteRequestPublish}
+                  onPublish={publishQuoteRequest}
+                />
+                <QuotePublishPanel
+                  title="Publish quote response"
+                  description="Stores the exact merchant response JSON and returns a stable URL for the agent."
+                  state={quoteResponsePublish}
+                  onPublish={publishQuoteResponse}
+                />
+              </div>
+              <CodePanel title="Hosted quote exchange" value={quoteExchangeSummary} />
               <CodePanel title="Quote payload" value={quotePayload} />
               <CodePanel title="Compute and commit quote" value={quoteCommand} />
               <div className="grid gap-2 sm:grid-cols-2">

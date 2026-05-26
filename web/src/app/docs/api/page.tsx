@@ -55,6 +55,45 @@ export default function ApiPage() {
 
       <hr className="border-border my-8" />
 
+      {/* Quote documents */}
+      <h2 className="text-xl font-semibold mb-4">Quote Documents</h2>
+
+      <h3 className="text-lg font-semibold mb-2">Publish Quote Request</h3>
+      <p className="text-sm text-muted mb-2"><code>POST /quote-requests</code></p>
+      <p className="text-sm text-muted mb-2">
+        Stores the exact agent quote request JSON by <code>keccak256</code> hash and returns a stable URI.
+      </p>
+      <CodeBlock language="json">{`{
+  "quote_request_json": "{\\n  \\"request_id\\": \\"req-001\\"\\n}",
+  "expected_hash": "0x...",
+  "request_id": "req-001",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "service_id": "enrich-company-v1",
+  "agent": "0x..."
+}`}</CodeBlock>
+
+      <h3 className="text-lg font-semibold mb-2">Publish Quote Response</h3>
+      <p className="text-sm text-muted mb-2"><code>POST /quote-responses</code></p>
+      <p className="text-sm text-muted mb-2">
+        Stores the exact merchant quote response JSON and can link it to a hosted quote request hash.
+      </p>
+      <CodeBlock language="json">{`{
+  "quote_response_json": "{\\n  \\"request_id\\": \\"req-001\\",\\n  \\"quote\\": {...}\\n}",
+  "expected_hash": "0x...",
+  "request_hash": "0x...",
+  "request_id": "req-001",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "agent": "0x..."
+}`}</CodeBlock>
+      <p className="text-sm text-muted mb-6">
+        Fetch original JSON at <code>GET /quote-requests/:hash</code> and <code>GET /quote-responses/:hash</code>.
+        Metadata is available at each route&apos;s <code>/metadata</code> path.
+      </p>
+
+      <hr className="border-border my-8" />
+
       {/* Agents */}
       <h2 className="text-xl font-semibold mb-4">Agents</h2>
 

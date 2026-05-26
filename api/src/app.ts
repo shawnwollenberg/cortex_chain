@@ -12,6 +12,7 @@ import { createBidsRouter } from "./routes/bids.js";
 import { createCommerceRouter } from "./routes/commerce.js";
 import { createAnalyticsRouter } from "./routes/analytics.js";
 import { createCatalogsRouter } from "./routes/catalogs.js";
+import { createQuotesRouter } from "./routes/quotes.js";
 
 export function createApp(pool: pg.Pool): express.Express {
   const app = express();
@@ -42,6 +43,7 @@ export function createApp(pool: pg.Pool): express.Express {
   app.use("/preflight", createPreflightRouter(pool));
   app.use("/analytics", createAnalyticsRouter(pool));
   app.use("/catalogs", createCatalogsRouter(pool));
+  app.use("/", createQuotesRouter(pool));
   app.use("/", createBidsRouter(pool));
   app.use("/", createParticipantsRouter(pool));
   app.use("/", createCommerceRouter(pool));

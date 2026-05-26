@@ -134,14 +134,14 @@ beforeAll(async () => {
   pool = new pg.Pool({ connectionString: TEST_DATABASE_URL });
 
   // Drop and recreate tables
-  await pool.query("DROP TABLE IF EXISTS catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
+  await pool.query("DROP TABLE IF EXISTS quote_response_documents, quote_request_documents, catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
 
   // Run migrations (read the SQL file)
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql"]) {
+  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql", "011_quote_documents.sql"]) {
     const migrationPath = resolve(__dirname, "..", "..", "indexer", "migrations", file);
     const sql = readFileSync(migrationPath, "utf-8");
     await pool.query(sql);
@@ -481,6 +481,92 @@ describe("Catalogs", () => {
       body: JSON.stringify({
         catalog_json: "{\"ok\":true}",
         expected_hash: `0x${"11".repeat(32)}`,
+      }),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe("Quote Documents", () => {
+  it("POST /quote-requests stores exact request JSON and GET /quote-requests/:hash returns it", async () => {
+    const quoteRequest = JSON.stringify({
+      request_id: "req-test",
+      merchant_id: "1",
+      service_numeric_id: "1",
+      service_id: "weather.current",
+      agent: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      input: { city: "Austin" },
+      accepted_payment_rails: ["transfer", "x402"],
+    }, null, 2);
+    const expectedHash = keccak256(toBytes(quoteRequest));
+
+    const res = await fetch(`${baseUrl}/quote-requests`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        quote_request_json: quoteRequest,
+        expected_hash: expectedHash,
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.request_hash).toBe(expectedHash);
+    expect(body.request_id).toBe("req-test");
+    expect(body.uri).toBe(`${baseUrl}/quote-requests/${expectedHash}`);
+
+    const requestRes = await fetch(body.uri);
+    expect(requestRes.status).toBe(200);
+    expect(await requestRes.text()).toBe(quoteRequest);
+  });
+
+  it("POST /quote-responses stores exact response JSON and links request hash", async () => {
+    const quoteRequest = JSON.stringify({ request_id: "req-response-test" }, null, 2);
+    const requestHash = keccak256(toBytes(quoteRequest));
+    await fetch(`${baseUrl}/quote-requests`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quote_request_json: quoteRequest, expected_hash: requestHash }),
+    });
+
+    const quoteResponse = JSON.stringify({
+      request_id: "req-response-test",
+      quote: {
+        merchantId: "1",
+        serviceNumericId: "1",
+        agent: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        amount: "1000000",
+      },
+      terms_document: "Weather result for one city.",
+    }, null, 2);
+    const expectedHash = keccak256(toBytes(quoteResponse));
+
+    const res = await fetch(`${baseUrl}/quote-responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        quote_response_json: quoteResponse,
+        expected_hash: expectedHash,
+        request_hash: requestHash,
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.response_hash).toBe(expectedHash);
+    expect(body.request_hash).toBe(requestHash);
+    expect(body.uri).toBe(`${baseUrl}/quote-responses/${expectedHash}`);
+
+    const responseRes = await fetch(body.uri);
+    expect(responseRes.status).toBe(200);
+    expect(await responseRes.text()).toBe(quoteResponse);
+  });
+
+  it("POST /quote-requests rejects mismatched expected_hash", async () => {
+    const res = await fetch(`${baseUrl}/quote-requests`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        quote_request_json: "{\"request_id\":\"bad\"}",
+        expected_hash: `0x${"22".repeat(32)}`,
       }),
     });
     expect(res.status).toBe(409);

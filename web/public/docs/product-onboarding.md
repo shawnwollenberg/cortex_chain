@@ -56,6 +56,7 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 5. **Quote acceptance**
    - Build an agent quote request JSON document.
    - Build a merchant quote response JSON document.
+   - Publish the quote request and quote response to the hosted Cortex API for URL-based agent/merchant handoff.
    - Build the onchain quote payload.
    - Generate resource, terms, and x402 payload hashes from their source documents.
    - Generate a viem template for `computeQuoteHash` and `commitQuote`.
@@ -74,6 +75,5 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 ## Next Product Improvements
 
 - Add stronger canonical JSON rules for teams that need byte-for-byte reproducibility across tools.
-- Add hosted quote request/response API endpoints instead of only quote templates.
 - Expand SDK examples into runnable sample scripts for transfer, swap, facilitator, and x402 payments.
 - Add guided post-transaction verification against the hosted API.

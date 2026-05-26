@@ -73,6 +73,84 @@ Returns hash, merchant id, service id, byte size, timestamps, and URI.
 
 ---
 
+### Quote Documents
+
+#### Publish Quote Request
+
+```
+POST /quote-requests
+```
+
+Stores the exact agent quote request JSON by `keccak256` hash and returns a stable URI for merchant retrieval.
+
+Request:
+```json
+{
+  "quote_request_json": "{\n  \"request_id\": \"req-001\",\n  \"merchant_id\": \"1\"\n}",
+  "expected_hash": "0x...",
+  "request_id": "req-001",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "service_id": "enrich-company-v1",
+  "agent": "0x..."
+}
+```
+
+Response `201`:
+```json
+{
+  "request_hash": "0x...",
+  "request_id": "req-001",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "service_id": "enrich-company-v1",
+  "agent": "0x...",
+  "size_bytes": 1024,
+  "uri": "https://api.cortex.wallyweb.com/quote-requests/0x..."
+}
+```
+
+Fetch the original JSON at `GET /quote-requests/:hash`. Metadata is available at `GET /quote-requests/:hash/metadata`.
+
+#### Publish Quote Response
+
+```
+POST /quote-responses
+```
+
+Stores the exact merchant quote response JSON by `keccak256` hash and can link it to a hosted quote request hash.
+
+Request:
+```json
+{
+  "quote_response_json": "{\n  \"request_id\": \"req-001\",\n  \"quote\": {...}\n}",
+  "expected_hash": "0x...",
+  "request_hash": "0x...",
+  "request_id": "req-001",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "agent": "0x..."
+}
+```
+
+Response `201`:
+```json
+{
+  "response_hash": "0x...",
+  "request_hash": "0x...",
+  "request_id": "req-001",
+  "merchant_id": "1",
+  "service_numeric_id": "1",
+  "agent": "0x...",
+  "size_bytes": 1024,
+  "uri": "https://api.cortex.wallyweb.com/quote-responses/0x..."
+}
+```
+
+Fetch the original JSON at `GET /quote-responses/:hash`. Metadata is available at `GET /quote-responses/:hash/metadata`.
+
+---
+
 ### Agents
 
 #### Get Agent by ID
