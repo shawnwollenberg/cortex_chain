@@ -94,6 +94,12 @@ export default function Home() {
             >
               Architecture docs
             </a>
+            <a
+              href="/blog/cortex-explained"
+              className="inline-block rounded-lg border border-border px-5 py-3 text-sm font-semibold text-muted transition-colors hover:border-cyan-300/70 hover:text-text"
+            >
+              Plain English
+            </a>
           </div>
         </div>
       </section>
