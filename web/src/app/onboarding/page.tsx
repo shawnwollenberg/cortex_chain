@@ -22,6 +22,19 @@ type LookupState = {
   result: unknown;
 };
 
+type EthereumProvider = {
+  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+};
+
+type WalletCheckState = {
+  account: string | null;
+  chainId: number | null;
+  apiOk: boolean | null;
+  contracts: Record<string, boolean>;
+  loading: boolean;
+  error: string | null;
+};
+
 type FieldProps = {
   label: string;
   value: string;
@@ -175,6 +188,90 @@ function LookupPanel({
   );
 }
 
+function PreflightPanel({
+  state,
+  onCheck,
+  onUseWallet,
+}: {
+  state: WalletCheckState;
+  onCheck: () => void;
+  onUseWallet: () => void;
+}) {
+  const onBaseSepolia = state.chainId === 84532;
+  const contractNames = Object.keys(CONTRACTS);
+  const allContractsFound = contractNames.every((name) => state.contracts[name]);
+
+  return (
+    <section className="mb-6 rounded-lg border border-border bg-surface p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Read-only preflight</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+            Connect a wallet to check account, network, deployed contract code, and hosted API health.
+            This does not submit transactions or request signatures.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onCheck}
+            className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+          >
+            {state.loading ? "Checking" : "Run checks"}
+          </button>
+          <button
+            type="button"
+            onClick={onUseWallet}
+            disabled={!state.account}
+            className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Use wallet address
+          </button>
+        </div>
+      </div>
+
+      {state.error ? <p className="mt-4 text-sm text-red-200">{state.error}</p> : null}
+
+      <div className="mt-5 grid gap-3 md:grid-cols-4">
+        <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+          <p className="text-xs uppercase tracking-normal text-muted">Wallet</p>
+          <p className="mt-2 break-all font-mono text-xs">{state.account ?? "Not connected"}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+          <p className="text-xs uppercase tracking-normal text-muted">Network</p>
+          <div className="mt-2">
+            <StatusPill ok={onBaseSepolia} label={state.chainId ? `Chain ${state.chainId}` : "Unknown chain"} />
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+          <p className="text-xs uppercase tracking-normal text-muted">Contracts</p>
+          <div className="mt-2">
+            <StatusPill ok={allContractsFound} label={allContractsFound ? "Code found" : "Unchecked or missing"} />
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+          <p className="text-xs uppercase tracking-normal text-muted">Hosted API</p>
+          <div className="mt-2">
+            <StatusPill ok={state.apiOk === true} label={state.apiOk === true ? "Healthy" : "Unchecked"} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {contractNames.map((name) => (
+          <div key={name} className="rounded-md border border-border bg-[#0d1117] p-3">
+            <p className="text-xs font-medium">{contractLabel(name)}</p>
+            <p className="mt-1 break-all font-mono text-[11px] text-muted">{CONTRACTS[name as keyof typeof CONTRACTS]}</p>
+            <div className="mt-2">
+              <StatusPill ok={state.contracts[name] === true} label={state.contracts[name] ? "Deployed" : "Unchecked"} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Checklist({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2 text-sm text-muted">
@@ -190,6 +287,14 @@ function Checklist({ items }: { items: string[] }) {
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<StepId>("merchant");
+  const [walletCheck, setWalletCheck] = useState<WalletCheckState>({
+    account: null,
+    chainId: null,
+    apiOk: null,
+    contracts: {},
+    loading: false,
+    error: null,
+  });
   const [merchantName, setMerchantName] = useState("Example Data Merchant");
   const [website, setWebsite] = useState("https://merchant.example");
   const [support, setSupport] = useState("support@merchant.example");
@@ -583,6 +688,46 @@ await merchantWallet.writeContract({
   const hashResource = () => setResourceHash(hashText(resourceDescriptor));
   const hashTerms = () => setTermsHash(hashText(termsDocument));
   const hashX402Payload = () => setX402PayloadHash(hashText(x402Payload));
+  const runWalletChecks = async () => {
+    setWalletCheck((current) => ({ ...current, loading: true, error: null }));
+    try {
+      const provider = getEthereumProvider();
+      if (!provider) throw new Error("No injected wallet found. Install or unlock a wallet first.");
+
+      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
+      const chainHex = await provider.request({ method: "eth_chainId" }) as string;
+      const nextContracts: Record<string, boolean> = {};
+      for (const [name, address] of Object.entries(CONTRACTS)) {
+        const code = await provider.request({ method: "eth_getCode", params: [address, "latest"] }) as string;
+        nextContracts[name] = Boolean(code && code !== "0x");
+      }
+
+      const apiOk = await fetch(`${API_URL}/health`)
+        .then((response) => response.ok)
+        .catch(() => false);
+
+      setWalletCheck({
+        account: accounts[0] ?? null,
+        chainId: Number.parseInt(chainHex, 16),
+        apiOk,
+        contracts: nextContracts,
+        loading: false,
+        error: null,
+      });
+    } catch (error) {
+      setWalletCheck((current) => ({
+        ...current,
+        loading: false,
+        error: error instanceof Error ? error.message : "Wallet check failed",
+      }));
+    }
+  };
+  const useWalletAddress = () => {
+    if (!walletCheck.account) return;
+    setMerchantOwner(walletCheck.account);
+    setAgentOwner(walletCheck.account);
+    setQuoteAgent(walletCheck.account);
+  };
 
   return (
     <main className="min-h-screen bg-[#090d12]">
@@ -605,6 +750,8 @@ await merchantWallet.writeContract({
             </Link>
           </div>
         </div>
+
+        <PreflightPanel state={walletCheck} onCheck={runWalletChecks} onUseWallet={useWalletAddress} />
 
         <div className="mb-6 grid gap-3 md:grid-cols-5">
           {[
@@ -966,4 +1113,23 @@ function paymentRailName(value: string) {
 function numberOrString(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : value;
+}
+
+function getEthereumProvider(): EthereumProvider | null {
+  if (typeof window === "undefined") return null;
+  const candidate = (window as Window & { ethereum?: EthereumProvider }).ethereum;
+  return candidate ?? null;
+}
+
+function contractLabel(name: string) {
+  switch (name) {
+    case "commerceRegistry":
+      return "CommerceRegistry";
+    case "agentRegistry":
+      return "AgentRegistry";
+    case "policyModule":
+      return "PolicyModule";
+    default:
+      return name;
+  }
 }

@@ -11,7 +11,16 @@ The page does not request private keys, connect a wallet, or submit transactions
 
 Generated hashes use `keccak256` through `viem`, matching the convention used in Cortex contract tests and examples.
 
+The read-only preflight panel can connect to an injected wallet to check the selected account, chain ID, deployed contract bytecode, and hosted API health. It does not request signatures or submit transactions.
+
 ## Current Onboarding Steps
+
+0. **Read-only preflight**
+   - Connect an injected wallet.
+   - Confirm the wallet is on Base Sepolia (`84532`).
+   - Check deployed bytecode for AgentRegistry, PolicyModule, and CommerceRegistry.
+   - Check hosted API health.
+   - Copy the connected wallet address into merchant owner, agent owner, and quote agent fields.
 
 1. **Merchant profile**
    - Build merchant metadata.
@@ -59,7 +68,7 @@ Generated hashes use `keccak256` through `viem`, matching the convention used in
 
 ## Next Product Improvements
 
-- Add wallet connection and read-only chain checks.
+- Add optional wallet network switching and deeper contract reads for merchant/service state.
 - Add stronger canonical JSON rules for teams that need byte-for-byte reproducibility across tools.
 - Add hosted catalog publishing to IPFS, Arweave, S3, or a Cortex-managed storage path.
 - Add hosted quote request/response API endpoints instead of only quote templates.
