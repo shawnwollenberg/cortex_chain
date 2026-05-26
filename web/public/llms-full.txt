@@ -37,6 +37,7 @@ This starts Anvil (local EVM), deploys contracts, launches the indexer/solver/AP
 - [Agentic Commerce](/docs/agentic-commerce.md) — Merchant registry, quote, receipt, dispute, and payment-rail model
 - [Local Development](/docs/local-dev.md) — Step-by-step local dev guide
 - [Testnet Deployment](/docs/testnet-deploy.md) — Current Base Sepolia and AWS deployment guide
+- [Product Onboarding](/docs/product-onboarding.md) — Guided onboarding workspace for merchant profiles, service catalogs, agent policy, and quote acceptance
 - [Value Proposition and Use Cases](/docs/value-prop-use-cases.md) — Strategic positioning, customer segments, use cases, wedges, product gaps, and messaging
 - [MCP Server](/docs/mcp.md) — Model Context Protocol tools for AI agents
 - [Design Decisions](/docs/decisions.md) — Key architectural choices and tradeoffs

@@ -21,6 +21,11 @@ const SECTIONS = [
     description: "Merchant onboarding, agent accounts, policies, quotes, receipts, and SDK usage.",
   },
   {
+    title: "Product Onboarding",
+    href: "/onboarding",
+    description: "Guided workspace for merchant profiles, service catalogs, agent policy, and quote acceptance.",
+  },
+  {
     title: "Value Proposition and Use Cases",
     href: "/docs/value-prop-use-cases",
     description: "Strategic positioning, customer segments, use cases, wedges, and product gaps.",

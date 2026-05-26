@@ -83,8 +83,14 @@ export default function Home() {
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <a
-              href="/docs/local-dev"
+              href="/onboarding"
               className="inline-block rounded-lg bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#06110d] transition-colors hover:bg-emerald-300"
+            >
+              Onboarding workspace
+            </a>
+            <a
+              href="/docs/local-dev"
+              className="inline-block rounded-lg border border-border px-5 py-3 text-sm font-semibold text-muted transition-colors hover:border-cyan-300/70 hover:text-text"
             >
               Local dev guide
             </a>
