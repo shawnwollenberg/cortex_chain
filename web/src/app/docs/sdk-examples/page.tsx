@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 
 const SETUP = `export API_URL=https://api.cortex.wallyweb.com
 export RPC_URL=https://sepolia.base.org
-export COMMERCE_REGISTRY_ADDRESS=0x378c1d1a06e80f7a53809bf4289afcd131a3be87
-export POLICY_MODULE_ADDRESS=0x8f14e12177c7baf8d389629210c3c82718205fd1
-export INTENT_BOOK_ADDRESS=0xea1db573f299a3f064ffd306b309179ff0542e8c`;
+export COMMERCE_REGISTRY_ADDRESS=0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4
+export POLICY_MODULE_ADDRESS=0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c
+export INTENT_BOOK_ADDRESS=0x16f7e7c4856bad4dcbE61400630087Dab75B229E`;
 
 const CLIENT = `const cortex = new AgentChainClient({
   apiUrl: process.env.API_URL ?? "https://api.cortex.wallyweb.com",
@@ -94,9 +94,9 @@ export QUOTE_REQUEST_URL=https://api.cortex.wallyweb.com/quote-requests/0x...
 export QUOTE_RESPONSE_URL=https://api.cortex.wallyweb.com/quote-responses/0x...
 npm run sdk:payment-rails`}</CodeBlock>
         <p className="mt-3 text-sm text-muted">
-          Current Base Sepolia contract semantics still tie quote commit and receipt authority to a
-          registered facilitator. Direct transfer and swap rails are supported as product paths, with a
-          contract cleanup needed to make non-facilitator rails first-class.
+          Current Base Sepolia contract semantics are rail-aware: facilitator and x402 quotes require an
+          active facilitator, while transfer and swap quotes can use <code>address(0)</code> and allow
+          the merchant or agent to record the receipt.
         </p>
       </div>
 

@@ -12,10 +12,10 @@ Use your own RPC and contract addresses for writes:
 
 ```bash
 export RPC_URL=https://sepolia.base.org
-export COMMERCE_REGISTRY_ADDRESS=0x378c1d1a06e80f7a53809bf4289afcd131a3be87
-export AGENT_REGISTRY_ADDRESS=0x9e2b846226539e93669e66c7478304910dcbaa61
-export POLICY_MODULE_ADDRESS=0x8f14e12177c7baf8d389629210c3c82718205fd1
-export INTENT_BOOK_ADDRESS=0xea1db573f299a3f064ffd306b309179ff0542e8c
+export COMMERCE_REGISTRY_ADDRESS=0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4
+export AGENT_REGISTRY_ADDRESS=0x24ca7dc7747b0166e73a2d6d99ce677476f046f3
+export POLICY_MODULE_ADDRESS=0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c
+export INTENT_BOOK_ADDRESS=0x16f7e7c4856bad4dcbe61400630087dab75b229e
 ```
 
 Never commit private keys. Keep testnet keys in local env files only.

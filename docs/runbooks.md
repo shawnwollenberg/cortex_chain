@@ -89,7 +89,7 @@ TRUNCATE agents, intents, fills, policies, tx_receipts, indexer_state;
 
 Then restart the indexer — it will re-index from block 0.
 
-For Base Sepolia, prefer resetting `indexer_state` to the deployment `START_BLOCK` from `ops/.env.testnet` rather than re-indexing from genesis. The hosted deployment currently starts at block `41977999`.
+For Base Sepolia, prefer resetting `indexer_state` to the deployment `START_BLOCK` from `ops/.env.testnet` rather than re-indexing from genesis. The hosted deployment currently starts at block `42033933`.
 
 ## Rotate Keys
 

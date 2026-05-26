@@ -95,7 +95,8 @@ INTENT_BOOK=$(jq -r '.transactions[3].contractAddress' "$BROADCAST_FILE")
 SOLVER_REGISTRY=$(jq -r '.transactions[4].contractAddress' "$BROADCAST_FILE")
 ATTESTOR_REGISTRY=$(jq -r '.transactions[5].contractAddress' "$BROADCAST_FILE")
 COMMERCE_REGISTRY=$(jq -r '.transactions[6].contractAddress' "$BROADCAST_FILE")
-START_BLOCK=$(jq -r '[.receipts[]?.blockNumber] | map(select(. != null)) | min // 0' "$BROADCAST_FILE")
+START_BLOCK_RAW=$(jq -r '[.receipts[]?.blockNumber] | map(select(. != null)) | min // 0' "$BROADCAST_FILE")
+START_BLOCK=$((START_BLOCK_RAW))
 
 echo ""
 echo "==> Deployed contracts:"

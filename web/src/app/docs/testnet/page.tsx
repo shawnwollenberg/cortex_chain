@@ -21,7 +21,7 @@ export default function TestnetDeployPage() {
           <p>Frontend: <code>https://cortex.wallyweb.com</code></p>
           <p>API: <code>https://api.cortex.wallyweb.com</code></p>
           <p>Network: Base Sepolia, chain ID <code>84532</code></p>
-          <p>Indexer start block: <code>41977999</code></p>
+          <p>Indexer start block: <code>42033933</code></p>
         </div>
       </div>
 
@@ -31,13 +31,13 @@ export default function TestnetDeployPage() {
           <thead><tr className="border-b border-border text-left text-muted"><th className="pb-3 pr-4">Contract</th><th className="pb-3">Base Sepolia Address</th></tr></thead>
           <tbody className="divide-y divide-border">
             {[
-              ["AgentRegistry", "0x9e2b846226539e93669e66c7478304910dcbaa61"],
-              ["IntentBook", "0xea1db573f299a3f064ffd306b309179ff0542e8c"],
-              ["PolicyModule", "0x8f14e12177c7baf8d389629210c3c82718205fd1"],
-              ["AttestationRegistry", "0xefe648ecf2615e09ddf89ec5f1cf36dbb462e84a"],
-              ["SolverRegistry", "0xbc62d0aff03e5e87553eec0b9eeb59da27f0dea2"],
-              ["AttestorRegistry", "0xbe00be1f56e3315cdbec8fa72d7962d931dc83f1"],
-              ["CommerceRegistry", "0x378c1d1a06e80f7a53809bf4289afcd131a3be87"],
+              ["AgentRegistry", "0x24ca7dc7747b0166e73a2d6d99ce677476f046f3"],
+              ["IntentBook", "0x16f7e7c4856bad4dcbE61400630087Dab75B229E"],
+              ["PolicyModule", "0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c"],
+              ["AttestationRegistry", "0x62631b3f111424831Daa61beCB2E7A4bB0f71D2f"],
+              ["SolverRegistry", "0x21cf04BC864953DA4C79160f820F38eF74213EeA"],
+              ["AttestorRegistry", "0x40f2623F177a400a5928C99F107500049a884da0"],
+              ["CommerceRegistry", "0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4"],
             ].map(([name, address]) => (
               <tr key={name}>
                 <td className="py-2 pr-4 font-medium">{name}</td>

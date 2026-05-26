@@ -10,6 +10,7 @@ contract CommerceRegistryTest is Test {
     address merchant = makeAddr("merchant");
     address agent = makeAddr("agent");
     address facilitator = makeAddr("facilitator");
+    address stranger = makeAddr("stranger");
     address token = makeAddr("token");
 
     function setUp() public {
@@ -101,7 +102,109 @@ contract CommerceRegistryTest is Test {
         assertEq(registry.getTrustSignal(signalId).reporter, agent);
     }
 
-    function test_commitQuote_revertIfFacilitatorNotRegistered() public {
+    function test_transferQuoteAllowsZeroFacilitatorAndMerchantReceipt() public {
+        (uint256 merchantId, uint256 serviceId) = _registerMerchantAndService();
+
+        bytes32 quoteHash = _commitQuote(
+            merchantId,
+            serviceId,
+            address(0),
+            CommerceRegistry.PaymentRail.TRANSFER,
+            bytes32(0),
+            1
+        );
+
+        vm.prank(merchant);
+        uint256 receiptId = registry.recordReceipt(quoteHash, keccak256("transfer-settled"));
+
+        assertEq(receiptId, 1);
+        assertTrue(registry.getQuote(quoteHash).settled);
+        assertEq(registry.getReceipt(receiptId).facilitator, address(0));
+        assertEq(uint8(registry.getReceipt(receiptId).paymentRail), uint8(CommerceRegistry.PaymentRail.TRANSFER));
+    }
+
+    function test_swapQuoteAllowsZeroFacilitatorAndAgentReceipt() public {
+        (uint256 merchantId, uint256 serviceId) = _registerMerchantAndService();
+
+        bytes32 quoteHash = _commitQuote(
+            merchantId,
+            serviceId,
+            address(0),
+            CommerceRegistry.PaymentRail.SWAP,
+            bytes32(0),
+            2
+        );
+
+        vm.prank(agent);
+        uint256 receiptId = registry.recordReceipt(quoteHash, keccak256("swap-settled"));
+
+        assertEq(receiptId, 1);
+        assertTrue(registry.getQuote(quoteHash).settled);
+        assertEq(registry.getReceipt(receiptId).facilitator, address(0));
+        assertEq(uint8(registry.getReceipt(receiptId).paymentRail), uint8(CommerceRegistry.PaymentRail.SWAP));
+    }
+
+    function test_transferQuoteRejectsUnauthorizedReceiptRecorder() public {
+        (uint256 merchantId, uint256 serviceId) = _registerMerchantAndService();
+        bytes32 quoteHash = _commitQuote(
+            merchantId,
+            serviceId,
+            address(0),
+            CommerceRegistry.PaymentRail.TRANSFER,
+            bytes32(0),
+            3
+        );
+
+        vm.prank(stranger);
+        vm.expectRevert(CommerceRegistry.Unauthorized.selector);
+        registry.recordReceipt(quoteHash, keccak256("fake-settlement"));
+    }
+
+    function test_facilitatorQuoteRequiresActiveFacilitator() public {
+        (uint256 merchantId, uint256 serviceId) = _registerMerchantAndService();
+
+        vm.prank(merchant);
+        vm.expectRevert(CommerceRegistry.FacilitatorInactive.selector);
+        registry.commitQuote(
+            CommerceRegistry.QuoteCommitment({
+                merchantId: merchantId,
+                serviceNumericId: serviceId,
+                agent: agent,
+                token: token,
+                facilitator: facilitator,
+                amount: 1e6,
+                paymentRail: CommerceRegistry.PaymentRail.FACILITATOR,
+                expiresAt: block.timestamp + 1 hours,
+                paymentNonce: 4,
+                resourceHash: keccak256("resource"),
+                termsHash: keccak256("terms"),
+                x402PayloadHash: bytes32(0)
+            })
+        );
+    }
+
+    function test_facilitatorQuoteAllowsFacilitatorReceipt() public {
+        vm.prank(facilitator);
+        registry.registerFacilitator(facilitator, "ipfs://facilitator", keccak256("facilitator"));
+        (uint256 merchantId, uint256 serviceId) = _registerMerchantAndService();
+        bytes32 quoteHash = _commitQuote(
+            merchantId,
+            serviceId,
+            facilitator,
+            CommerceRegistry.PaymentRail.FACILITATOR,
+            bytes32(0),
+            5
+        );
+
+        vm.prank(facilitator);
+        uint256 receiptId = registry.recordReceipt(quoteHash, keccak256("facilitator-settled"));
+
+        assertEq(receiptId, 1);
+        assertEq(registry.getReceipt(receiptId).facilitator, facilitator);
+        assertEq(uint8(registry.getReceipt(receiptId).paymentRail), uint8(CommerceRegistry.PaymentRail.FACILITATOR));
+    }
+
+    function test_x402Quote_revertIfFacilitatorNotRegistered() public {
         vm.prank(merchant);
         uint256 merchantId = registry.registerMerchant(merchant, "ipfs://merchant", keccak256("merchant"));
         vm.prank(merchant);
@@ -131,5 +234,46 @@ contract CommerceRegistryTest is Test {
                 x402PayloadHash: keccak256("x402-payload")
             })
         );
+    }
+
+    function _registerMerchantAndService() internal returns (uint256 merchantId, uint256 serviceId) {
+        vm.prank(merchant);
+        merchantId = registry.registerMerchant(merchant, "ipfs://merchant", keccak256("merchant"));
+        vm.prank(merchant);
+        serviceId = registry.registerService(
+            merchantId,
+            "weather.current",
+            "ipfs://service",
+            keccak256("service"),
+            keccak256("weather")
+        );
+    }
+
+    function _commitQuote(
+        uint256 merchantId,
+        uint256 serviceId,
+        address quoteFacilitator,
+        CommerceRegistry.PaymentRail rail,
+        bytes32 x402PayloadHash,
+        uint256 paymentNonce
+    ) internal returns (bytes32 quoteHash) {
+        CommerceRegistry.QuoteCommitment memory commitment = CommerceRegistry.QuoteCommitment({
+            merchantId: merchantId,
+            serviceNumericId: serviceId,
+            agent: agent,
+            token: token,
+            facilitator: quoteFacilitator,
+            amount: 1e6,
+            paymentRail: rail,
+            expiresAt: block.timestamp + 1 hours,
+            paymentNonce: paymentNonce,
+            resourceHash: keccak256("resource"),
+            termsHash: keccak256("terms"),
+            x402PayloadHash: x402PayloadHash
+        });
+        quoteHash = registry.computeQuoteHash(commitment);
+
+        vm.prank(merchant);
+        registry.commitQuote(commitment);
     }
 }

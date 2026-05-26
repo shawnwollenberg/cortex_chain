@@ -8,10 +8,10 @@ export const metadata: Metadata = {
 };
 
 const LIVE_ADDRESSES = [
-  ["CommerceRegistry", "0x378c1d1a06e80f7a53809bf4289afcd131a3be87"],
-  ["AgentRegistry", "0x9e2b846226539e93669e66c7478304910dcbaa61"],
-  ["PolicyModule", "0x8f14e12177c7baf8d389629210c3c82718205fd1"],
-  ["IntentBook", "0xea1db573f299a3f064ffd306b309179ff0542e8c"],
+  ["CommerceRegistry", "0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4"],
+  ["AgentRegistry", "0x24ca7dc7747b0166e73a2d6d99ce677476f046f3"],
+  ["PolicyModule", "0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c"],
+  ["IntentBook", "0x16f7e7c4856bad4dcbE61400630087Dab75B229E"],
 ];
 
 export default function ExamplesPage() {
@@ -26,10 +26,10 @@ export default function ExamplesPage() {
       <h2 className="text-xl font-semibold mb-4">Base Sepolia Setup</h2>
       <CodeBlock language="bash">{`export API_URL=https://api.cortex.wallyweb.com
 export RPC_URL=https://sepolia.base.org
-export COMMERCE_REGISTRY_ADDRESS=0x378c1d1a06e80f7a53809bf4289afcd131a3be87
-export AGENT_REGISTRY_ADDRESS=0x9e2b846226539e93669e66c7478304910dcbaa61
-export POLICY_MODULE_ADDRESS=0x8f14e12177c7baf8d389629210c3c82718205fd1
-export INTENT_BOOK_ADDRESS=0xea1db573f299a3f064ffd306b309179ff0542e8c`}</CodeBlock>
+export COMMERCE_REGISTRY_ADDRESS=0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4
+export AGENT_REGISTRY_ADDRESS=0x24ca7dc7747b0166e73a2d6d99ce677476f046f3
+export POLICY_MODULE_ADDRESS=0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c
+export INTENT_BOOK_ADDRESS=0x16f7e7c4856bad4dcbE61400630087Dab75B229E`}</CodeBlock>
 
       <div className="overflow-x-auto my-8">
         <table className="w-full text-sm">

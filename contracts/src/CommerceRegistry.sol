@@ -341,7 +341,7 @@ contract CommerceRegistry {
         Service storage service = _service(commitment.serviceNumericId);
         if (merchant.owner != msg.sender) revert Unauthorized();
         if (service.merchantId != commitment.merchantId) revert ServiceNotFound();
-        if (!_facilitatorActive(commitment.facilitator)) revert FacilitatorInactive();
+        if (!_paymentRailAllowed(commitment.paymentRail, commitment.facilitator)) revert FacilitatorInactive();
         quoteHash = _computeQuoteHash(commitment);
 
         _quotes[quoteHash] = Quote({
@@ -369,7 +369,7 @@ contract CommerceRegistry {
         if (quote.merchantId == 0) revert QuoteNotFound();
         if (quote.settled) revert QuoteAlreadySettled();
         if (block.timestamp > quote.expiresAt) revert QuoteExpired();
-        if (quote.facilitator != msg.sender) revert Unauthorized();
+        if (!_canRecordReceipt(quote, msg.sender)) revert Unauthorized();
 
         quote.settled = true;
         receiptId = _nextReceiptId++;
@@ -409,7 +409,7 @@ contract CommerceRegistry {
     function recordFulfillment(uint256 receiptId, bytes32 fulfillmentHash) external {
         Receipt storage receipt = _receipt(receiptId);
         Merchant storage merchant = _merchant(receipt.merchantId);
-        if (msg.sender != merchant.owner && msg.sender != receipt.facilitator) revert Unauthorized();
+        if (!_isMerchantOrFacilitator(merchant.owner, receipt.facilitator, msg.sender)) revert Unauthorized();
 
         receipt.fulfillmentHash = fulfillmentHash;
         emit FulfillmentRecorded(receiptId, fulfillmentHash);
@@ -418,7 +418,10 @@ contract CommerceRegistry {
     function openDispute(uint256 receiptId, bytes32 reasonHash) external returns (uint256 disputeId) {
         Receipt storage receipt = _receipt(receiptId);
         Merchant storage merchant = _merchant(receipt.merchantId);
-        if (msg.sender != receipt.agent && msg.sender != merchant.owner && msg.sender != receipt.facilitator) {
+        if (
+            msg.sender != receipt.agent
+                && !_isMerchantOrFacilitator(merchant.owner, receipt.facilitator, msg.sender)
+        ) {
             revert Unauthorized();
         }
 
@@ -438,7 +441,7 @@ contract CommerceRegistry {
         if (dispute.receiptId == 0) revert DisputeNotFound();
         Receipt storage receipt = _receipt(dispute.receiptId);
         Merchant storage merchant = _merchant(receipt.merchantId);
-        if (msg.sender != merchant.owner && msg.sender != receipt.facilitator) revert Unauthorized();
+        if (!_isMerchantOrFacilitator(merchant.owner, receipt.facilitator, msg.sender)) revert Unauthorized();
         if (status == DisputeStatus.OPEN) revert Unauthorized();
 
         dispute.status = status;
@@ -618,5 +621,29 @@ contract CommerceRegistry {
     function _facilitatorActive(address facilitator) internal view returns (bool) {
         uint256 facilitatorId = _facilitatorIdByAddress[facilitator];
         return facilitatorId != 0 && _facilitatorsById[facilitatorId].active;
+    }
+
+    function _paymentRailAllowed(PaymentRail paymentRail, address facilitator) internal view returns (bool) {
+        if (paymentRail == PaymentRail.FACILITATOR || paymentRail == PaymentRail.X402) {
+            return facilitator != address(0) && _facilitatorActive(facilitator);
+        }
+        return facilitator == address(0) || _facilitatorActive(facilitator);
+    }
+
+    function _canRecordReceipt(Quote storage quote, address sender) internal view returns (bool) {
+        if (quote.paymentRail == PaymentRail.FACILITATOR || quote.paymentRail == PaymentRail.X402) {
+            return sender == quote.facilitator;
+        }
+
+        Merchant storage merchant = _merchant(quote.merchantId);
+        return sender == merchant.owner || sender == quote.agent;
+    }
+
+    function _isMerchantOrFacilitator(address merchantOwner, address facilitator, address sender)
+        internal
+        pure
+        returns (bool)
+    {
+        return sender == merchantOwner || (facilitator != address(0) && sender == facilitator);
     }
 }

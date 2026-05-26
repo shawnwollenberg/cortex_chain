@@ -466,7 +466,7 @@ The strongest business model may be infrastructure revenue first, protocol fees 
 - Seeded hosted demos with real Base Sepolia merchants, services, tokens, catalogs, quote documents, receipts, and disputes.
 - Payment rail execution adapters for direct ERC-20 transfer, native token transfer, swap routers, facilitator settlement, and x402 facilitators.
 - A first-class x402 normalizer and verifier that maps payment requirements into Cortex quote, policy, receipt, and dispute records.
-- Cleaner contract semantics for non-facilitator rails so direct transfer and swap flows do not require facilitator-specific receipt authority unless intentionally configured.
+- Better browser wallet UX for transaction simulation, receipt polling, decoded errors, and guided next-step handoffs.
 
 ### Trust
 

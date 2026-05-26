@@ -9,9 +9,9 @@ const BASE_SEPOLIA_CHAIN_ID = 84532;
 const BASE_SEPOLIA_CHAIN_HEX = "0x14a34";
 
 const CONTRACTS = {
-  commerceRegistry: "0x378c1d1a06e80f7a53809bf4289afcd131a3be87",
-  agentRegistry: "0x9e2b846226539e93669e66c7478304910dcbaa61",
-  policyModule: "0x8f14e12177c7baf8d389629210c3c82718205fd1",
+  commerceRegistry: "0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4",
+  agentRegistry: "0x24ca7dc7747b0166e73a2d6d99ce677476f046f3",
+  policyModule: "0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c",
 };
 
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
@@ -69,7 +69,102 @@ const AGENT_READ_ABI = [
   },
 ] as const;
 
+const COMMERCE_WRITE_ABI = [
+  {
+    type: "function",
+    name: "registerMerchant",
+    inputs: [
+      { name: "payoutAddress", type: "address" },
+      { name: "metadataURI", type: "string" },
+      { name: "metadataHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "merchantId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registerService",
+    inputs: [
+      { name: "merchantId", type: "uint256" },
+      { name: "serviceId", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "metadataHash", type: "bytes32" },
+      { name: "capabilityHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "serviceNumericId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "commitQuote",
+    inputs: [
+      {
+        name: "commitment",
+        type: "tuple",
+        components: [
+          { name: "merchantId", type: "uint256" },
+          { name: "serviceNumericId", type: "uint256" },
+          { name: "agent", type: "address" },
+          { name: "token", type: "address" },
+          { name: "facilitator", type: "address" },
+          { name: "amount", type: "uint256" },
+          { name: "paymentRail", type: "uint8" },
+          { name: "expiresAt", type: "uint256" },
+          { name: "paymentNonce", type: "uint256" },
+          { name: "resourceHash", type: "bytes32" },
+          { name: "termsHash", type: "bytes32" },
+          { name: "x402PayloadHash", type: "bytes32" },
+        ],
+      },
+    ],
+    outputs: [{ name: "quoteHash", type: "bytes32" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recordReceipt",
+    inputs: [
+      { name: "quoteHash", type: "bytes32" },
+      { name: "resultHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "receiptId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+const AGENT_WRITE_ABI = [
+  {
+    type: "function",
+    name: "registerAgent",
+    inputs: [
+      { name: "metadataURI", type: "string" },
+      { name: "pubkey", type: "bytes" },
+      { name: "capabilitiesHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "agentId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+const POLICY_WRITE_ABI = [
+  {
+    type: "function",
+    name: "setSignedPaymentPolicy",
+    inputs: [
+      { name: "merchant", type: "address" },
+      { name: "token", type: "address" },
+      { name: "facilitator", type: "address" },
+      { name: "maxPerPayment", type: "uint256" },
+      { name: "maxPerDay", type: "uint256" },
+      { name: "allowed", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
 type StepId = "merchant" | "service" | "catalog" | "agent" | "quote";
+type TxKey = "merchant" | "service" | "agent" | "policy" | "quote" | "receipt";
 type LookupState = {
   loading: boolean;
   error: string | null;
@@ -105,6 +200,12 @@ type CatalogPublishState = {
 };
 
 type QuotePublishState = CatalogPublishState;
+
+type TxState = {
+  loading: boolean;
+  error: string | null;
+  hash: string | null;
+};
 
 type FieldProps = {
   label: string;
@@ -281,7 +382,7 @@ function PreflightPanel({
           <h2 className="text-base font-semibold">Read-only preflight</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
             Connect a wallet to check account, network, deployed contract code, and hosted API health.
-            This does not submit transactions or request signatures.
+            Transaction buttons below will open your wallet before anything is submitted.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -475,6 +576,53 @@ function QuotePublishPanel({
   );
 }
 
+function TransactionPanel({
+  title,
+  description,
+  actionLabel,
+  state,
+  onSend,
+}: {
+  title: string;
+  description: string;
+  actionLabel: string;
+  state: TxState;
+  onSend: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onSend}
+          disabled={state.loading}
+          className="rounded-md border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {state.loading ? "Waiting" : actionLabel}
+        </button>
+      </div>
+      {state.error ? <p className="mt-3 text-sm text-red-200">{state.error}</p> : null}
+      {state.hash ? (
+        <div className="mt-3 rounded-md border border-border bg-[#090d12] p-3">
+          <p className="text-xs font-medium">Transaction hash</p>
+          <a
+            href={`https://sepolia.basescan.org/tx/${state.hash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 block break-all font-mono text-xs text-accent hover:underline"
+          >
+            {state.hash}
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Checklist({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2 text-sm text-muted">
@@ -522,6 +670,14 @@ export default function OnboardingPage() {
     error: null,
     uri: null,
     hash: null,
+  });
+  const [txStates, setTxStates] = useState<Record<TxKey, TxState>>({
+    merchant: { loading: false, error: null, hash: null },
+    service: { loading: false, error: null, hash: null },
+    agent: { loading: false, error: null, hash: null },
+    policy: { loading: false, error: null, hash: null },
+    quote: { loading: false, error: null, hash: null },
+    receipt: { loading: false, error: null, hash: null },
   });
   const [merchantName, setMerchantName] = useState("Example Data Merchant");
   const [website, setWebsite] = useState("https://merchant.example");
@@ -571,10 +727,13 @@ export default function OnboardingPage() {
   const [quoteAgent, setQuoteAgent] = useState("0x...");
   const [amount, setAmount] = useState("1000000");
   const [paymentRail, setPaymentRail] = useState("3");
+  const [expiresAt, setExpiresAt] = useState(() => String(Math.floor(Date.now() / 1000) + 3600));
   const [paymentNonce, setPaymentNonce] = useState("1");
   const [resourceDescriptor, setResourceDescriptor] = useState("merchant-service-resource-v1");
   const [termsDocument, setTermsDocument] = useState("One company enrichment response for the requested domain.");
   const [x402Payload, setX402Payload] = useState("x402 payment requirement payload");
+  const [quoteHash, setQuoteHash] = useState(ZERO_HASH);
+  const [resultDescriptor, setResultDescriptor] = useState("merchant fulfilled accepted quote");
   const [quoteRequestInput, setQuoteRequestInput] = useState('{"domain":"example.com"}');
   const [quoteRequestId, setQuoteRequestId] = useState("req-001");
   const [resourceHash, setResourceHash] = useState(ZERO_HASH);
@@ -812,7 +971,7 @@ cast send "$POLICY_MODULE_ADDRESS" \\
       facilitator,
       amount,
       paymentRail,
-      expiresAt: "<unix-expiry>",
+      expiresAt,
       paymentNonce,
       resourceHash,
       termsHash,
@@ -919,6 +1078,9 @@ await merchantWallet.writeContract({
   const tokenValid = isAddress(token);
   const facilitatorValid = isAddress(facilitator);
   const quoteAgentValid = isAddress(quoteAgent);
+  const setTxState = (key: TxKey, patch: Partial<TxState>) => {
+    setTxStates((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
+  };
   const hashMerchantMetadata = () => setMerchantHash(hashText(merchantMetadata));
   const hashServiceMetadata = () => setServiceHash(hashText(serviceMetadata));
   const hashCatalog = () => {
@@ -1138,6 +1300,111 @@ await merchantWallet.writeContract({
     setAgentOwner(walletCheck.account);
     setQuoteAgent(walletCheck.account);
   };
+  const sendRegisterMerchant = async () => {
+    await sendTx("merchant", async (provider, account) => {
+      const data = encodeFunctionData({
+        abi: COMMERCE_WRITE_ABI,
+        functionName: "registerMerchant",
+        args: [parseAddress(payout, "payout address"), merchantUri, parseBytes32(merchantHash, "merchant metadata hash")],
+      });
+      return sendWalletTransaction(provider, account, CONTRACTS.commerceRegistry, data);
+    });
+  };
+  const sendRegisterService = async () => {
+    await sendTx("service", async (provider, account) => {
+      const data = encodeFunctionData({
+        abi: COMMERCE_WRITE_ABI,
+        functionName: "registerService",
+        args: [
+          parsePositiveBigInt(merchantId, "merchant id"),
+          serviceId,
+          serviceUri,
+          parseBytes32(serviceHash, "service metadata hash"),
+          parseBytes32(capabilityHash, "capability hash"),
+        ],
+      });
+      return sendWalletTransaction(provider, account, CONTRACTS.commerceRegistry, data);
+    });
+  };
+  const sendRegisterAgent = async () => {
+    await sendTx("agent", async (provider, account) => {
+      const data = encodeFunctionData({
+        abi: AGENT_WRITE_ABI,
+        functionName: "registerAgent",
+        args: [agentUri, parseHexBytes(agentPubkey, "agent pubkey"), parseBytes32(agentCapabilitiesHash, "agent capabilities hash")],
+      });
+      return sendWalletTransaction(provider, account, CONTRACTS.agentRegistry, data);
+    });
+  };
+  const sendSetPaymentPolicy = async () => {
+    await sendTx("policy", async (provider, account) => {
+      const data = encodeFunctionData({
+        abi: POLICY_WRITE_ABI,
+        functionName: "setSignedPaymentPolicy",
+        args: [
+          parseAddress(merchantOwner, "merchant owner"),
+          parseAddress(token, "token"),
+          parseAddress(facilitator, "facilitator"),
+          parseUint(maxPerPayment, "max per payment"),
+          parseUint(maxPerDay, "max per day"),
+          true,
+        ],
+      });
+      return sendWalletTransaction(provider, account, CONTRACTS.policyModule, data);
+    });
+  };
+  const sendCommitQuote = async () => {
+    await sendTx("quote", async (provider, account) => {
+      const commitment = buildQuoteCommitment({
+        merchantId,
+        serviceNumericId,
+        quoteAgent,
+        token,
+        facilitator,
+        amount,
+        paymentRail,
+        expiresAt,
+        paymentNonce,
+        resourceHash,
+        termsHash,
+        x402PayloadHash,
+      });
+      const data = encodeFunctionData({
+        abi: COMMERCE_WRITE_ABI,
+        functionName: "commitQuote",
+        args: [commitment],
+      });
+      return sendWalletTransaction(provider, account, CONTRACTS.commerceRegistry, data);
+    });
+  };
+  const sendRecordReceipt = async () => {
+    await sendTx("receipt", async (provider, account) => {
+      const data = encodeFunctionData({
+        abi: COMMERCE_WRITE_ABI,
+        functionName: "recordReceipt",
+        args: [parseBytes32(quoteHash, "quote hash"), hashText(resultDescriptor)],
+      });
+      return sendWalletTransaction(provider, account, CONTRACTS.commerceRegistry, data);
+    });
+  };
+  const sendTx = async (
+    key: TxKey,
+    build: (provider: EthereumProvider, account: `0x${string}`) => Promise<string>,
+  ) => {
+    setTxState(key, { loading: true, error: null, hash: null });
+    try {
+      const { provider, account } = await requireWalletReady();
+      const hash = await build(provider, account);
+      setTxState(key, { loading: false, error: null, hash });
+      await runWalletChecks();
+    } catch (error) {
+      setTxState(key, {
+        loading: false,
+        error: error instanceof Error ? error.message : "Transaction failed",
+        hash: null,
+      });
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#090d12]">
@@ -1148,7 +1415,7 @@ await merchantWallet.writeContract({
             <h1 className="mt-1 text-3xl font-semibold tracking-normal">Launch an agent-commerce flow</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
               Build merchant metadata, register services, prepare an agent account, and commit a quote.
-              This page generates safe templates only; transactions still run through your wallet or scripts.
+              You can use the generated templates or send the core transactions directly from a browser wallet.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
@@ -1223,6 +1490,13 @@ await merchantWallet.writeContract({
             <div className="grid gap-4">
               <CodePanel title="Merchant metadata JSON" value={merchantMetadata} />
               <CodePanel title="Register merchant" value={merchantCommand} />
+              <TransactionPanel
+                title="Register merchant with wallet"
+                description="Sends registerMerchant from the connected wallet. The connected account becomes the merchant owner."
+                actionLabel="Register merchant"
+                state={txStates.merchant}
+                onSend={sendRegisterMerchant}
+              />
               <LookupPanel
                 title="Merchant API check"
                 description="After registration and indexing, confirm the merchant record is visible."
@@ -1275,6 +1549,13 @@ await merchantWallet.writeContract({
             <div className="grid gap-4">
               <CodePanel title="Service metadata JSON" value={serviceMetadata} />
               <CodePanel title="Register service" value={serviceCommand} />
+              <TransactionPanel
+                title="Register service with wallet"
+                description="Sends registerService from the connected merchant owner wallet."
+                actionLabel="Register service"
+                state={txStates.service}
+                onSend={sendRegisterService}
+              />
               <LookupPanel
                 title="Service API check"
                 description="After registration and indexing, confirm active services for this merchant."
@@ -1393,6 +1674,22 @@ cast send "${CONTRACTS.commerceRegistry}" \\
             <div className="grid gap-4">
               <CodePanel title="Agent metadata JSON" value={agentMetadata} />
               <CodePanel title="Register agent and set payment policy" value={agentCommand} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <TransactionPanel
+                  title="Register agent with wallet"
+                  description="Sends registerAgent from the connected owner wallet."
+                  actionLabel="Register agent"
+                  state={txStates.agent}
+                  onSend={sendRegisterAgent}
+                />
+                <TransactionPanel
+                  title="Set signed payment policy"
+                  description="Allows the connected wallet to spend under merchant, token, facilitator, and budget limits."
+                  actionLabel="Set policy"
+                  state={txStates.policy}
+                  onSend={sendSetPaymentPolicy}
+                />
+              </div>
               <OnchainReadPanel state={onchainRead} onRead={readOnchainState} />
             </div>
           </section>
@@ -1417,12 +1714,15 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                 <StatusPill ok={facilitatorValid} label={facilitatorValid ? "Valid facilitator address" : "Enter a 0x facilitator address"} />
                 <Field label="Amount" value={amount} onChange={setAmount} />
                 <Field label="Payment rail" value={paymentRail} onChange={setPaymentRail} />
+                <Field label="Expires at" value={expiresAt} onChange={setExpiresAt} />
                 <Field label="Payment nonce" value={paymentNonce} onChange={setPaymentNonce} />
+                <Field label="Accepted quote hash" value={quoteHash} onChange={setQuoteHash} />
                 <Field label="Quote request ID" value={quoteRequestId} onChange={setQuoteRequestId} />
                 <TextArea label="Quote request input" value={quoteRequestInput} onChange={setQuoteRequestInput} />
                 <TextArea label="Resource descriptor" value={resourceDescriptor} onChange={setResourceDescriptor} />
                 <TextArea label="Terms document" value={termsDocument} onChange={setTermsDocument} />
                 <TextArea label="x402 payload" value={x402Payload} onChange={setX402Payload} />
+                <TextArea label="Receipt result descriptor" value={resultDescriptor} onChange={setResultDescriptor} />
                 <Field label="Resource hash" value={resourceHash} onChange={setResourceHash} />
                 <Field label="Terms hash" value={termsHash} onChange={setTermsHash} />
                 <Field label="x402 payload hash" value={x402PayloadHash} onChange={setX402PayloadHash} />
@@ -1486,6 +1786,22 @@ cast send "${CONTRACTS.commerceRegistry}" \\
               <CodePanel title="Hosted quote exchange" value={quoteExchangeSummary} />
               <CodePanel title="Quote payload" value={quotePayload} />
               <CodePanel title="Compute and commit quote" value={quoteCommand} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <TransactionPanel
+                  title="Commit quote with wallet"
+                  description="Sends commitQuote from the connected merchant owner wallet."
+                  actionLabel="Commit quote"
+                  state={txStates.quote}
+                  onSend={sendCommitQuote}
+                />
+                <TransactionPanel
+                  title="Record receipt with wallet"
+                  description="For transfer/swap rails, the merchant or agent can record the receipt. For facilitator/x402 rails, use the facilitator wallet."
+                  actionLabel="Record receipt"
+                  state={txStates.receipt}
+                  onSend={sendRecordReceipt}
+                />
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <DownloadButton
                   filename={`${quoteRequestId || "quote"}-request.json`}
@@ -1622,6 +1938,82 @@ async function callContract(provider: EthereumProvider, to: string, data: string
     method: "eth_call",
     params: [{ to, data }, "latest"],
   });
+}
+
+async function requireWalletReady() {
+  const provider = getEthereumProvider();
+  if (!provider) throw new Error("No injected wallet found. Install or unlock a wallet first.");
+  const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
+  const account = accounts[0];
+  if (!account || !isAddress(account)) throw new Error("Connect a valid wallet account.");
+
+  const chainHex = await provider.request({ method: "eth_chainId" }) as string;
+  const chainId = Number.parseInt(chainHex, 16);
+  if (chainId !== BASE_SEPOLIA_CHAIN_ID) throw new Error("Switch your wallet to Base Sepolia before sending transactions.");
+
+  return { provider, account: account as `0x${string}` };
+}
+
+async function sendWalletTransaction(
+  provider: EthereumProvider,
+  from: `0x${string}`,
+  to: string,
+  data: string,
+) {
+  return provider.request({
+    method: "eth_sendTransaction",
+    params: [{ from, to, data }],
+  }) as Promise<string>;
+}
+
+function buildQuoteCommitment(input: {
+  merchantId: string;
+  serviceNumericId: string;
+  quoteAgent: string;
+  token: string;
+  facilitator: string;
+  amount: string;
+  paymentRail: string;
+  expiresAt: string;
+  paymentNonce: string;
+  resourceHash: string;
+  termsHash: string;
+  x402PayloadHash: string;
+}) {
+  return {
+    merchantId: parsePositiveBigInt(input.merchantId, "merchant id"),
+    serviceNumericId: parsePositiveBigInt(input.serviceNumericId, "service numeric id"),
+    agent: parseAddress(input.quoteAgent, "agent address"),
+    token: parseAddress(input.token, "token"),
+    facilitator: parseAddress(input.facilitator, "facilitator"),
+    amount: parseUint(input.amount, "amount"),
+    paymentRail: Number(parseUint(input.paymentRail, "payment rail")),
+    expiresAt: parseUint(input.expiresAt, "expiry"),
+    paymentNonce: parseUint(input.paymentNonce, "payment nonce"),
+    resourceHash: parseBytes32(input.resourceHash, "resource hash"),
+    termsHash: parseBytes32(input.termsHash, "terms hash"),
+    x402PayloadHash: parseBytes32(input.x402PayloadHash, "x402 payload hash"),
+  };
+}
+
+function parseAddress(value: string, label: string) {
+  if (!isAddress(value)) throw new Error(`Enter a valid ${label}.`);
+  return value as `0x${string}`;
+}
+
+function parseUint(value: string, label: string) {
+  if (!/^\d+$/.test(value)) throw new Error(`Enter a numeric ${label}.`);
+  return BigInt(value);
+}
+
+function parseBytes32(value: string, label: string) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) throw new Error(`Enter a bytes32 ${label}.`);
+  return value as `0x${string}`;
+}
+
+function parseHexBytes(value: string, label: string) {
+  if (!/^0x([0-9a-fA-F]{2})*$/.test(value)) throw new Error(`Enter hex bytes for ${label}.`);
+  return value as `0x${string}`;
 }
 
 function parsePositiveBigInt(value: string, label: string) {

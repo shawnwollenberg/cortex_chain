@@ -28,9 +28,9 @@ Use the hosted Base Sepolia API for reads:
 ```bash
 export API_URL=https://api.cortex.wallyweb.com
 export RPC_URL=https://sepolia.base.org
-export COMMERCE_REGISTRY_ADDRESS=0x378c1d1a06e80f7a53809bf4289afcd131a3be87
-export POLICY_MODULE_ADDRESS=0x8f14e12177c7baf8d389629210c3c82718205fd1
-export INTENT_BOOK_ADDRESS=0xea1db573f299a3f064ffd306b309179ff0542e8c
+export COMMERCE_REGISTRY_ADDRESS=0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4
+export POLICY_MODULE_ADDRESS=0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c
+export INTENT_BOOK_ADDRESS=0x16f7e7c4856bad4dcbe61400630087dab75b229e
 ```
 
 ## Hosted Payment Rail Dry Run
@@ -59,7 +59,7 @@ By default this is a dry run. Set `EXECUTE_TX=true` only after the participating
 
 The script supports direct ERC-20 transfer, swap/router execution, facilitator-mediated payments, and x402 policy recording. It intentionally keeps x402 settlement and swap routing provider-specific; Cortex verifies the quote, policy, hashes, and receipt context around those rails.
 
-Current Base Sepolia contract semantics still tie quote commit and receipt authority to a registered facilitator. Treat direct transfer and swap execution as the desired product path, but expect the next contract cleanup to make non-facilitator rails first-class.
+Current Base Sepolia contract semantics are rail-aware: facilitator and x402 quotes require an active facilitator, while transfer and swap quotes can use `address(0)` and allow the merchant or agent to record the receipt.
 
 ## Client Setup
 

@@ -100,7 +100,7 @@ const WEDGES = [
 ];
 
 const GAPS = [
-  ["Product", "Browser wallet transaction flows, canonical JSON and schema validation, seeded hosted demos, rail execution adapters, x402 normalization, and cleaner direct transfer/swap receipt semantics."],
+  ["Product", "Transaction simulation, receipt polling, canonical JSON and schema validation, seeded hosted demos, rail execution adapters, and x402 normalization."],
   ["Trust", "Merchant verification, service attestations, agent risk signals, dispute resolution roles, and explainable reputation scoring."],
   ["Enterprise", "Organization policy, team roles, approval flows, budget dashboards, accounting exports, compliance metadata, and vendor review attestations."],
   ["Ecosystem", "Wallet and smart account integrations, x402 facilitator integrations, merchant templates, agent framework examples, marketplace integrations, and partner analytics."],
