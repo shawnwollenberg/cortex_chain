@@ -87,6 +87,139 @@ export const IntentBookABI = [
   },
 ] as const;
 
+export const CommerceRegistryABI = [
+  {
+    type: "function",
+    name: "computeQuoteHash",
+    inputs: [
+      { name: "merchantId", type: "uint256" },
+      { name: "serviceNumericId", type: "uint256" },
+      { name: "agent", type: "address" },
+      { name: "token", type: "address" },
+      { name: "facilitator", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "paymentRail", type: "uint8" },
+      { name: "expiresAt", type: "uint256" },
+      { name: "paymentNonce", type: "uint256" },
+      { name: "resourceHash", type: "bytes32" },
+      { name: "termsHash", type: "bytes32" },
+      { name: "x402PayloadHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "quoteHash", type: "bytes32" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "commitQuote",
+    inputs: [
+      {
+        name: "commitment",
+        type: "tuple",
+        components: [
+          { name: "merchantId", type: "uint256" },
+          { name: "serviceNumericId", type: "uint256" },
+          { name: "agent", type: "address" },
+          { name: "token", type: "address" },
+          { name: "facilitator", type: "address" },
+          { name: "amount", type: "uint256" },
+          { name: "paymentRail", type: "uint8" },
+          { name: "expiresAt", type: "uint256" },
+          { name: "paymentNonce", type: "uint256" },
+          { name: "resourceHash", type: "bytes32" },
+          { name: "termsHash", type: "bytes32" },
+          { name: "x402PayloadHash", type: "bytes32" },
+        ],
+      },
+    ],
+    outputs: [{ name: "quoteHash", type: "bytes32" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recordReceipt",
+    inputs: [
+      { name: "quoteHash", type: "bytes32" },
+      { name: "resultHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "receiptId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recordFulfillment",
+    inputs: [
+      { name: "receiptId", type: "uint256" },
+      { name: "fulfillmentHash", type: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "openDispute",
+    inputs: [
+      { name: "receiptId", type: "uint256" },
+      { name: "reasonHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "disputeId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "resolveDispute",
+    inputs: [
+      { name: "disputeId", type: "uint256" },
+      { name: "status", type: "uint8" },
+      { name: "resolutionHash", type: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+export const PolicyModuleABI = [
+  {
+    type: "function",
+    name: "setSignedPaymentPolicy",
+    inputs: [
+      { name: "merchant", type: "address" },
+      { name: "token", type: "address" },
+      { name: "facilitator", type: "address" },
+      { name: "maxPerPayment", type: "uint256" },
+      { name: "maxPerDay", type: "uint256" },
+      { name: "allowed", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recordSignedPayment",
+    inputs: [
+      { name: "merchant", type: "address" },
+      { name: "token", type: "address" },
+      { name: "facilitator", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "paymentHash", type: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+export const ERC20ABI = [
+  {
+    type: "function",
+    name: "transfer",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "success", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
 const CONSTRAINTS_TYPEHASH = keccak256(
   new TextEncoder().encode("Constraints(uint256 amountInMax,uint256 amountOutMin,uint256 deadline,uint16 slippageBps)"),
 );
@@ -100,7 +233,8 @@ const INTENT_TYPEHASH = keccak256(
 export interface AgentChainClientConfig {
   apiUrl: string;
   publicClient: {
-    waitForTransactionReceipt(args: { hash: Hex }): Promise<{ logs: Array<{ data: Hex; topics: readonly Hex[] }> }>;
+    readContract(args: Record<string, unknown>): Promise<unknown>;
+    waitForTransactionReceipt(args: { hash: Hex }): Promise<{ logs: Array<{ data: Hex; topics?: readonly Hex[] }> }>;
   };
   walletClient: {
     account?: { address: Address };
@@ -108,6 +242,8 @@ export interface AgentChainClientConfig {
     writeContract(args: Record<string, unknown>): Promise<Hex>;
   };
   intentBookAddress: Address;
+  commerceRegistryAddress?: Address;
+  policyModuleAddress?: Address;
   chain: { id: number };
 }
 
@@ -198,6 +334,30 @@ export interface TrustSignalQuery extends PaginationParams {
   subject_id?: string | bigint;
   kind?: SignalKind | number;
   reporter?: Address;
+}
+
+export interface QuoteCommitment {
+  merchantId: bigint;
+  serviceNumericId: bigint;
+  agent: Address;
+  token: Address;
+  facilitator: Address;
+  amount: bigint;
+  paymentRail: PaymentRail | number;
+  expiresAt: bigint;
+  paymentNonce: bigint;
+  resourceHash: Hex;
+  termsHash: Hex;
+  x402PayloadHash: Hex;
+}
+
+export interface SignedPaymentPolicy {
+  merchant: Address;
+  token: Address;
+  facilitator: Address;
+  maxPerPayment: bigint;
+  maxPerDay: bigint;
+  allowed?: boolean;
 }
 
 export interface CreateIntentRequest {
@@ -376,6 +536,113 @@ export class AgentChainClient {
     return this.getJson("/analytics/commerce");
   }
 
+  async computeQuoteHash(quote: QuoteCommitment): Promise<Hex> {
+    const commerceRegistryAddress = this.requireCommerceRegistryAddress();
+    return await this.config.publicClient.readContract({
+      address: commerceRegistryAddress,
+      abi: CommerceRegistryABI,
+      functionName: "computeQuoteHash",
+      args: quoteArgs(quote),
+    }) as Hex;
+  }
+
+  async commitQuote(quote: QuoteCommitment): Promise<Hex> {
+    const account = this.requireAccount();
+    return this.config.walletClient.writeContract({
+      account,
+      chain: this.config.chain,
+      address: this.requireCommerceRegistryAddress(),
+      abi: CommerceRegistryABI,
+      functionName: "commitQuote",
+      args: [quote],
+    });
+  }
+
+  async recordReceipt(quoteHash: Hex, resultHash: Hex): Promise<Hex> {
+    const account = this.requireAccount();
+    return this.config.walletClient.writeContract({
+      account,
+      chain: this.config.chain,
+      address: this.requireCommerceRegistryAddress(),
+      abi: CommerceRegistryABI,
+      functionName: "recordReceipt",
+      args: [quoteHash, resultHash],
+    });
+  }
+
+  async recordFulfillment(receiptId: bigint, fulfillmentHash: Hex): Promise<Hex> {
+    const account = this.requireAccount();
+    return this.config.walletClient.writeContract({
+      account,
+      chain: this.config.chain,
+      address: this.requireCommerceRegistryAddress(),
+      abi: CommerceRegistryABI,
+      functionName: "recordFulfillment",
+      args: [receiptId, fulfillmentHash],
+    });
+  }
+
+  async openDispute(receiptId: bigint, reasonHash: Hex): Promise<Hex> {
+    const account = this.requireAccount();
+    return this.config.walletClient.writeContract({
+      account,
+      chain: this.config.chain,
+      address: this.requireCommerceRegistryAddress(),
+      abi: CommerceRegistryABI,
+      functionName: "openDispute",
+      args: [receiptId, reasonHash],
+    });
+  }
+
+  async resolveDispute(disputeId: bigint, status: 1 | 2, resolutionHash: Hex): Promise<Hex> {
+    const account = this.requireAccount();
+    return this.config.walletClient.writeContract({
+      account,
+      chain: this.config.chain,
+      address: this.requireCommerceRegistryAddress(),
+      abi: CommerceRegistryABI,
+      functionName: "resolveDispute",
+      args: [disputeId, status, resolutionHash],
+    });
+  }
+
+  async setSignedPaymentPolicy(policy: SignedPaymentPolicy): Promise<Hex> {
+    const account = this.requireAccount();
+    return this.config.walletClient.writeContract({
+      account,
+      chain: this.config.chain,
+      address: this.requirePolicyModuleAddress(),
+      abi: PolicyModuleABI,
+      functionName: "setSignedPaymentPolicy",
+      args: [
+        policy.merchant,
+        policy.token,
+        policy.facilitator,
+        policy.maxPerPayment,
+        policy.maxPerDay,
+        policy.allowed ?? true,
+      ],
+    });
+  }
+
+  async recordSignedPayment(
+    merchant: Address,
+    token: Address,
+    facilitator: Address,
+    amount: bigint,
+    paymentHash: Hex,
+  ): Promise<Hex> {
+    const account = this.requireAccount();
+    return this.config.walletClient.writeContract({
+      account,
+      chain: this.config.chain,
+      address: this.requirePolicyModuleAddress(),
+      abi: PolicyModuleABI,
+      functionName: "recordSignedPayment",
+      args: [merchant, token, facilitator, amount, paymentHash],
+    });
+  }
+
   private async waitForIndexedIntent(intentId: bigint, timeoutMs: number): Promise<boolean> {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
@@ -416,6 +683,24 @@ export class AgentChainClient {
       throw new Error(error);
     }
     return payload;
+  }
+
+  private requireAccount(): { address: Address } {
+    const account = this.config.walletClient.account;
+    if (!account) throw new Error("walletClient must include an account");
+    return account;
+  }
+
+  private requireCommerceRegistryAddress(): Address {
+    const address = this.config.commerceRegistryAddress;
+    if (!address) throw new Error("commerceRegistryAddress is required for commerce writes");
+    return address;
+  }
+
+  private requirePolicyModuleAddress(): Address {
+    const address = this.config.policyModuleAddress;
+    if (!address) throw new Error("policyModuleAddress is required for policy writes");
+    return address;
   }
 }
 
@@ -493,16 +778,17 @@ function splitSignature(signature: Hex): { v: number; r: Hex; s: Hex } {
   };
 }
 
-function findIntentId(logs: Array<{ data: Hex; topics: readonly Hex[] }>): bigint {
+function findIntentId(logs: Array<{ data: Hex; topics?: readonly Hex[] }>): bigint {
   for (const log of logs) {
+    if (!log.topics) continue;
     try {
       const decoded = decodeEventLog({
         abi: IntentBookABI,
         data: log.data,
         topics: [...log.topics] as [] | [Hex, ...Hex[]],
-      });
+      }) as { eventName?: string; args?: { intentId?: bigint } };
       if (decoded.eventName === "IntentSubmitted") {
-        return decoded.args.intentId;
+        if (typeof decoded.args?.intentId === "bigint") return decoded.args.intentId;
       }
     } catch {
       // Ignore unrelated logs.
@@ -546,6 +832,23 @@ function isErrorPayload(payload: unknown): payload is { error: string } {
     payload !== null &&
     "error" in payload &&
     typeof (payload as { error: unknown }).error === "string";
+}
+
+function quoteArgs(quote: QuoteCommitment) {
+  return [
+    quote.merchantId,
+    quote.serviceNumericId,
+    quote.agent,
+    quote.token,
+    quote.facilitator,
+    quote.amount,
+    quote.paymentRail,
+    quote.expiresAt,
+    quote.paymentNonce,
+    quote.resourceHash,
+    quote.termsHash,
+    quote.x402PayloadHash,
+  ] as const;
 }
 
 const INTENT_TYPES = {

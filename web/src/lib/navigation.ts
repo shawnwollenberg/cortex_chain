@@ -16,6 +16,7 @@ export const docsNav: NavGroup[] = [
       { title: "Local Development", href: "/docs/local-dev" },
       { title: "Testnet Deployment", href: "/docs/testnet" },
       { title: "Examples", href: "/docs/examples" },
+      { title: "SDK Examples", href: "/docs/sdk-examples" },
       { title: "Value Prop", href: "/docs/value-prop-use-cases" },
     ],
   },

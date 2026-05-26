@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "demo": "tsx run.ts"
+    "demo": "tsx run.ts",
+    "sdk:commerce": "tsx ../sdk-examples/commerce-flow.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

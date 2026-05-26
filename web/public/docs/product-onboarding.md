@@ -63,5 +63,5 @@ Generated hashes use `keccak256` through `viem`, matching the convention used in
 - Add stronger canonical JSON rules for teams that need byte-for-byte reproducibility across tools.
 - Add hosted catalog publishing to IPFS, Arweave, S3, or a Cortex-managed storage path.
 - Add hosted quote request/response API endpoints instead of only quote templates.
-- Add SDK examples for transfer, swap, facilitator, and x402 payments.
+- Expand SDK examples into runnable sample scripts for transfer, swap, facilitator, and x402 payments.
 - Add guided post-transaction verification against the hosted API.

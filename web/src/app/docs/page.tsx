@@ -21,6 +21,11 @@ const SECTIONS = [
     description: "Merchant onboarding, agent accounts, policies, quotes, receipts, and SDK usage.",
   },
   {
+    title: "SDK Examples",
+    href: "/docs/sdk-examples",
+    description: "TypeScript flows for discovery, quotes, payments, receipts, disputes, and reputation.",
+  },
+  {
     title: "Product Onboarding",
     href: "/onboarding",
     description: "Guided workspace for merchant profiles, service catalogs, agent policy, and quote acceptance.",
