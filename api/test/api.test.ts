@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
 import { createApp } from "../src/app.js";
 import type { Server } from "node:http";
+import { keccak256, toBytes } from "viem";
 
 const TEST_DATABASE_URL = process.env.DATABASE_URL ?? "postgres://localhost:5432/ai_chain_test";
 
@@ -133,14 +134,14 @@ beforeAll(async () => {
   pool = new pg.Pool({ connectionString: TEST_DATABASE_URL });
 
   // Drop and recreate tables
-  await pool.query("DROP TABLE IF EXISTS disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
+  await pool.query("DROP TABLE IF EXISTS catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
 
   // Run migrations (read the SQL file)
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql"]) {
+  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql"]) {
     const migrationPath = resolve(__dirname, "..", "..", "indexer", "migrations", file);
     const sql = readFileSync(migrationPath, "utf-8");
     await pool.query(sql);
@@ -442,6 +443,47 @@ describe("Commerce", () => {
     const body = await res.json();
     expect(body.trust_signals).toHaveLength(1);
     expect(body.trust_signals[0].reporter).toBe("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+  });
+});
+
+describe("Catalogs", () => {
+  it("POST /catalogs stores exact catalog JSON and GET /catalogs/:hash returns it", async () => {
+    const catalog = JSON.stringify({
+      merchant: { name: "Example", network: "base-sepolia" },
+      services: [{ service_id: "weather.current", endpoint: "https://merchant.example/weather" }],
+    }, null, 2);
+    const expectedHash = keccak256(toBytes(catalog));
+
+    const res = await fetch(`${baseUrl}/catalogs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        catalog_json: catalog,
+        expected_hash: expectedHash,
+        merchant_id: "1",
+        service_id: "weather.current",
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.catalog_hash).toBe(expectedHash);
+    expect(body.uri).toBe(`${baseUrl}/catalogs/${expectedHash}`);
+
+    const catalogRes = await fetch(body.uri);
+    expect(catalogRes.status).toBe(200);
+    expect(await catalogRes.text()).toBe(catalog);
+  });
+
+  it("POST /catalogs rejects mismatched expected_hash", async () => {
+    const res = await fetch(`${baseUrl}/catalogs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        catalog_json: "{\"ok\":true}",
+        expected_hash: `0x${"11".repeat(32)}`,
+      }),
+    });
+    expect(res.status).toBe(409);
   });
 });
 

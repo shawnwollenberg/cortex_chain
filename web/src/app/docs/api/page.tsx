@@ -23,6 +23,38 @@ export default function ApiPage() {
 
       <hr className="border-border my-8" />
 
+      {/* Catalogs */}
+      <h2 className="text-xl font-semibold mb-4">Catalog Documents</h2>
+
+      <h3 className="text-lg font-semibold mb-2">Publish Catalog JSON</h3>
+      <p className="text-sm text-muted mb-2"><code>POST /catalogs</code></p>
+      <p className="text-sm text-muted mb-2">
+        Stores the exact catalog JSON bytes by <code>keccak256</code> hash. Use the returned
+        <code> uri</code> and <code>catalog_hash</code> as the service metadata URI/hash.
+      </p>
+      <CodeBlock language="json">{`{
+  "catalog_json": "{\\n  \\"merchant\\": {...},\\n  \\"services\\": [...]\\n}",
+  "expected_hash": "0x...",
+  "merchant_id": "1",
+  "service_id": "enrich-company-v1"
+}`}</CodeBlock>
+      <CodeBlock language="json">{`{
+  "catalog_hash": "0x...",
+  "merchant_id": "1",
+  "service_id": "enrich-company-v1",
+  "size_bytes": 2048,
+  "uri": "https://api.cortex.wallyweb.com/catalogs/0x..."
+}`}</CodeBlock>
+
+      <h3 className="text-lg font-semibold mb-2">Fetch Catalog JSON</h3>
+      <p className="text-sm text-muted mb-2"><code>GET /catalogs/:hash</code></p>
+      <p className="text-sm text-muted mb-6">
+        Returns the original JSON text as <code>application/json</code>. Metadata is available at
+        <code> GET /catalogs/:hash/metadata</code>.
+      </p>
+
+      <hr className="border-border my-8" />
+
       {/* Agents */}
       <h2 className="text-xl font-semibold mb-4">Agents</h2>
 

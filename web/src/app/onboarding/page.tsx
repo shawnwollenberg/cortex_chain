@@ -97,6 +97,13 @@ type OnchainReadState = {
   agentIds: string[] | null;
 };
 
+type CatalogPublishState = {
+  loading: boolean;
+  error: string | null;
+  uri: string | null;
+  hash: string | null;
+};
+
 type FieldProps = {
   label: string;
   value: string;
@@ -392,6 +399,42 @@ function OnchainResult({ title, value, empty }: { title: string; value: unknown;
   );
 }
 
+function CatalogPublishPanel({
+  state,
+  onPublish,
+}: {
+  state: CatalogPublishState;
+  onPublish: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">Hosted catalog publishing</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">
+            Publishes the exact catalog JSON to the Cortex API and returns a URI/hash pair for service registration.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onPublish}
+          className="rounded-md border border-border px-3 py-2 text-xs text-muted transition-colors hover:border-muted hover:text-text"
+        >
+          {state.loading ? "Publishing" : "Publish catalog"}
+        </button>
+      </div>
+      {state.error ? <p className="mt-3 text-sm text-red-200">{state.error}</p> : null}
+      {state.uri && state.hash ? (
+        <div className="mt-3 rounded-md border border-border bg-[#090d12] p-3">
+          <p className="text-xs font-medium">Published catalog</p>
+          <p className="mt-2 break-all font-mono text-xs text-muted">{state.uri}</p>
+          <p className="mt-2 break-all font-mono text-xs text-muted">{state.hash}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Checklist({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2 text-sm text-muted">
@@ -421,6 +464,12 @@ export default function OnboardingPage() {
     merchant: null,
     service: null,
     agentIds: null,
+  });
+  const [catalogPublish, setCatalogPublish] = useState<CatalogPublishState>({
+    loading: false,
+    error: null,
+    uri: null,
+    hash: null,
   });
   const [merchantName, setMerchantName] = useState("Example Data Merchant");
   const [website, setWebsite] = useState("https://merchant.example");
@@ -810,6 +859,43 @@ await merchantWallet.writeContract({
     setServiceHash(hash);
     setServiceUri(catalogUri);
   };
+  const publishCatalog = async () => {
+    setCatalogPublish({ loading: true, error: null, uri: null, hash: null });
+    try {
+      const expectedHash = hashText(serviceCatalog);
+      const response = await fetch(`${API_URL}/catalogs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          catalog_json: serviceCatalog,
+          expected_hash: expectedHash,
+          merchant_id: merchantId,
+          service_id: serviceId,
+        }),
+      });
+      const body = await response.json() as { uri?: string; catalog_hash?: string; error?: string };
+      if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+      if (!body.uri || !body.catalog_hash) throw new Error("Catalog publish response was missing uri or catalog_hash");
+
+      setCatalogUri(body.uri);
+      setCatalogHash(body.catalog_hash);
+      setServiceUri(body.uri);
+      setServiceHash(body.catalog_hash);
+      setCatalogPublish({
+        loading: false,
+        error: null,
+        uri: body.uri,
+        hash: body.catalog_hash,
+      });
+    } catch (error) {
+      setCatalogPublish({
+        loading: false,
+        error: error instanceof Error ? error.message : "Catalog publish failed",
+        uri: null,
+        hash: null,
+      });
+    }
+  };
   const hashCapability = () => setCapabilityHash(hashText(capability));
   const hashAgentCapabilities = () => setAgentCapabilitiesHash(hashText(agentCapabilities));
   const hashResource = () => setResourceHash(hashText(resourceDescriptor));
@@ -1106,6 +1192,9 @@ await merchantWallet.writeContract({
                     label="Download catalog JSON"
                   />
                 </div>
+              </div>
+              <div className="mt-4">
+                <CatalogPublishPanel state={catalogPublish} onPublish={publishCatalog} />
               </div>
               <div className="mt-6 rounded-lg border border-border bg-[#0d1117] p-4">
                 <h3 className="text-sm font-semibold">Publishing checklist</h3>

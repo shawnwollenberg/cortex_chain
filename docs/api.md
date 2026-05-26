@@ -22,6 +22,57 @@ Response:
 
 ---
 
+### Catalog Documents
+
+#### Publish Catalog JSON
+
+```
+POST /catalogs
+```
+
+Stores the exact catalog JSON bytes by `keccak256` hash. Use the returned `uri` and `catalog_hash` as the service metadata URI/hash when registering a service.
+
+Request:
+```json
+{
+  "catalog_json": "{\n  \"merchant\": {...},\n  \"services\": [...]\n}",
+  "expected_hash": "0x...",
+  "merchant_id": "1",
+  "service_id": "enrich-company-v1"
+}
+```
+
+`expected_hash`, `merchant_id`, and `service_id` are optional. If `expected_hash` is provided, the API rejects mismatches.
+
+Response `201`:
+```json
+{
+  "catalog_hash": "0x...",
+  "merchant_id": "1",
+  "service_id": "enrich-company-v1",
+  "size_bytes": 2048,
+  "uri": "https://api.cortex.wallyweb.com/catalogs/0x..."
+}
+```
+
+#### Fetch Catalog JSON
+
+```
+GET /catalogs/:hash
+```
+
+Returns the original JSON text as `application/json`.
+
+#### Fetch Catalog Metadata
+
+```
+GET /catalogs/:hash/metadata
+```
+
+Returns hash, merchant id, service id, byte size, timestamps, and URI.
+
+---
+
 ### Agents
 
 #### Get Agent by ID

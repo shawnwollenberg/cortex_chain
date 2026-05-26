@@ -43,6 +43,7 @@ The read-only preflight panel can connect to an injected wallet to check the sel
    - Include service endpoint, method, payment rail, token, amount, facilitator, schemas, SLA, refund, and privacy metadata.
    - Generate a catalog hash with `keccak256`.
    - Download the exact JSON file to publish to IPFS, Arweave, S3, or HTTPS.
+   - Or publish the exact JSON to the hosted Cortex API, which stores it by `keccak256` hash and returns `https://api.cortex.wallyweb.com/catalogs/:hash`.
    - Use the catalog URI and hash as the service metadata URI/hash for `registerService`.
 
 4. **Agent policy**
@@ -73,7 +74,6 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 ## Next Product Improvements
 
 - Add stronger canonical JSON rules for teams that need byte-for-byte reproducibility across tools.
-- Add hosted catalog publishing to IPFS, Arweave, S3, or a Cortex-managed storage path.
 - Add hosted quote request/response API endpoints instead of only quote templates.
 - Expand SDK examples into runnable sample scripts for transfer, swap, facilitator, and x402 payments.
 - Add guided post-transaction verification against the hosted API.

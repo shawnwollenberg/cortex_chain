@@ -11,6 +11,7 @@ import { createPreflightRouter } from "./routes/preflight.js";
 import { createBidsRouter } from "./routes/bids.js";
 import { createCommerceRouter } from "./routes/commerce.js";
 import { createAnalyticsRouter } from "./routes/analytics.js";
+import { createCatalogsRouter } from "./routes/catalogs.js";
 
 export function createApp(pool: pg.Pool): express.Express {
   const app = express();
@@ -26,7 +27,7 @@ export function createApp(pool: pg.Pool): express.Express {
     next();
   });
 
-  app.use(express.json());
+  app.use(express.json({ limit: "256kb" }));
   app.use(requestLogger);
 
   app.get("/health", (_req, res) => {
@@ -40,6 +41,7 @@ export function createApp(pool: pg.Pool): express.Express {
   app.use("/attestations", createAttestationsRouter(pool));
   app.use("/preflight", createPreflightRouter(pool));
   app.use("/analytics", createAnalyticsRouter(pool));
+  app.use("/catalogs", createCatalogsRouter(pool));
   app.use("/", createBidsRouter(pool));
   app.use("/", createParticipantsRouter(pool));
   app.use("/", createCommerceRouter(pool));

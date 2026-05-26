@@ -52,6 +52,7 @@ psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/006_bids_attestation_schem
 psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/007_onchain_intent_commitments.sql" -q 2>/dev/null || true
 psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/008_fill_proofs.sql" -q 2>/dev/null || true
 psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/009_commerce.sql" -q 2>/dev/null || true
+psql "$DATABASE_URL" -f "$ROOT_DIR/indexer/migrations/010_catalog_documents.sql" -q 2>/dev/null || true
 echo "    Migrations applied"
 
 # --- Indexer ---
