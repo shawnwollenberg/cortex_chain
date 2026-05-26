@@ -15,7 +15,7 @@ const CONTRACTS = {
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-type StepId = "merchant" | "service" | "agent" | "quote";
+type StepId = "merchant" | "service" | "catalog" | "agent" | "quote";
 type LookupState = {
   loading: boolean;
   error: string | null;
@@ -86,6 +86,28 @@ function CodePanel({ title, value }: { title: string; value: string }) {
         <code>{value}</code>
       </pre>
     </div>
+  );
+}
+
+function DownloadButton({ filename, value, label }: { filename: string; value: string; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const blob = new Blob([value], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }}
+      className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+    >
+      {label}
+    </button>
   );
 }
 
@@ -186,6 +208,20 @@ export default function OnboardingPage() {
   const [capabilityHash, setCapabilityHash] = useState(ZERO_HASH);
   const [inputSchema, setInputSchema] = useState('{"domain":"string"}');
   const [outputSchema, setOutputSchema] = useState('{"name":"string","industry":"string","confidence":"number"}');
+  const [catalogUri, setCatalogUri] = useState("ipfs://service-catalog");
+  const [catalogHash, setCatalogHash] = useState(ZERO_HASH);
+  const [serviceEndpoint, setServiceEndpoint] = useState("https://merchant.example/api/enrich-company");
+  const [serviceMethod, setServiceMethod] = useState("POST");
+  const [serviceDescription, setServiceDescription] = useState("Returns company profile data for a submitted domain.");
+  const [termsUri, setTermsUri] = useState("https://merchant.example/terms");
+  const [privacyUri, setPrivacyUri] = useState("https://merchant.example/privacy");
+  const [timeoutMs, setTimeoutMs] = useState("30000");
+  const [availabilityTarget, setAvailabilityTarget] = useState("0.99");
+  const [automaticRefund, setAutomaticRefund] = useState("true");
+  const [disputeWindowSeconds, setDisputeWindowSeconds] = useState("86400");
+  const [storesRequest, setStoresRequest] = useState("true");
+  const [storesResponse, setStoresResponse] = useState("false");
+  const [piiAllowed, setPiiAllowed] = useState("false");
 
   const [agentName, setAgentName] = useState("Procurement Agent");
   const [agentOwner, setAgentOwner] = useState("0x...");
@@ -206,6 +242,8 @@ export default function OnboardingPage() {
   const [resourceDescriptor, setResourceDescriptor] = useState("merchant-service-resource-v1");
   const [termsDocument, setTermsDocument] = useState("One company enrichment response for the requested domain.");
   const [x402Payload, setX402Payload] = useState("x402 payment requirement payload");
+  const [quoteRequestInput, setQuoteRequestInput] = useState('{"domain":"example.com"}');
+  const [quoteRequestId, setQuoteRequestId] = useState("req-001");
   const [resourceHash, setResourceHash] = useState(ZERO_HASH);
   const [termsHash, setTermsHash] = useState(ZERO_HASH);
   const [x402PayloadHash, setX402PayloadHash] = useState(ZERO_HASH);
@@ -249,6 +287,99 @@ export default function OnboardingPage() {
         2,
       ),
     [serviceId, serviceName, capability, inputSchema, outputSchema],
+  );
+
+  const serviceCatalog = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          merchant: {
+            name: merchantName,
+            domain: domainFromUrl(website),
+            support_uri: support,
+            terms_uri: termsUri,
+            privacy_uri: privacyUri,
+            owner_address: merchantOwner,
+            payout_address: payout,
+            registry: CONTRACTS.commerceRegistry,
+            network: "base-sepolia",
+          },
+          services: [
+            {
+              service_id: serviceId,
+              name: serviceName,
+              description: serviceDescription,
+              endpoint: serviceEndpoint,
+              method: serviceMethod,
+              capability: {
+                hash: capabilityHash,
+                tags: capability.split(".").filter(Boolean),
+              },
+              payment: {
+                scheme: paymentRailName(paymentRail),
+                network: "base-sepolia",
+                token,
+                amount,
+                target: payout,
+                facilitator: {
+                  address: facilitator,
+                  url: "https://facilitator.example",
+                },
+              },
+              io: {
+                input_schema: safeJson(inputSchema),
+                output_schema: safeJson(outputSchema),
+              },
+              sla: {
+                timeout_ms: numberOrString(timeoutMs),
+                availability_target: Number(availabilityTarget),
+              },
+              refund: {
+                policy_uri: termsUri,
+                automatic_if_timeout: automaticRefund === "true",
+                dispute_window_seconds: numberOrString(disputeWindowSeconds),
+              },
+              privacy: {
+                stores_request: storesRequest === "true",
+                stores_response: storesResponse === "true",
+                pii_allowed: piiAllowed === "true",
+                redaction_required: piiAllowed !== "true",
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    [
+      merchantName,
+      website,
+      support,
+      termsUri,
+      privacyUri,
+      merchantOwner,
+      payout,
+      serviceId,
+      serviceName,
+      serviceDescription,
+      serviceEndpoint,
+      serviceMethod,
+      capability,
+      capabilityHash,
+      paymentRail,
+      token,
+      amount,
+      facilitator,
+      inputSchema,
+      outputSchema,
+      timeoutMs,
+      availabilityTarget,
+      automaticRefund,
+      disputeWindowSeconds,
+      storesRequest,
+      storesResponse,
+      piiAllowed,
+    ],
   );
 
   const agentMetadata = useMemo(
@@ -358,6 +489,49 @@ cast send "$POLICY_MODULE_ADDRESS" \\
     2,
   );
 
+  const quoteRequest = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          request_id: quoteRequestId,
+          merchant_id: merchantId,
+          service_numeric_id: serviceNumericId,
+          service_id: serviceId,
+          agent: quoteAgent,
+          input: safeJson(quoteRequestInput),
+          accepted_payment_rails: ["transfer", "swap", "facilitator", "x402"],
+          preferred_token: token,
+          max_amount: amount,
+          requested_resource_hash: resourceHash,
+        },
+        null,
+        2,
+      ),
+    [quoteRequestId, merchantId, serviceNumericId, serviceId, quoteAgent, quoteRequestInput, token, amount, resourceHash],
+  );
+
+  const quoteResponse = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          request_id: quoteRequestId,
+          quote: JSON.parse(quotePayload) as unknown,
+          terms_document: termsDocument,
+          payment_requirement: paymentRail === "3" ? safeJson(x402Payload) : null,
+          agent_checks: [
+            "fetch service catalog and verify metadata hash",
+            "verify merchant/service active status",
+            "verify quote hash from CommerceRegistry.computeQuoteHash",
+            "verify account policy before payment",
+            "verify x402 payload hash when paymentRail is 3",
+          ],
+        },
+        null,
+        2,
+      ),
+    [quoteRequestId, quotePayload, termsDocument, paymentRail, x402Payload],
+  );
+
   const quoteCommand = `// Use viem or cast to compute and commit the same canonical quote.
 // paymentRail: 0=transfer, 1=swap, 2=facilitator, 3=x402
 
@@ -398,6 +572,12 @@ await merchantWallet.writeContract({
   const quoteAgentValid = isAddress(quoteAgent);
   const hashMerchantMetadata = () => setMerchantHash(hashText(merchantMetadata));
   const hashServiceMetadata = () => setServiceHash(hashText(serviceMetadata));
+  const hashCatalog = () => {
+    const hash = hashText(serviceCatalog);
+    setCatalogHash(hash);
+    setServiceHash(hash);
+    setServiceUri(catalogUri);
+  };
   const hashCapability = () => setCapabilityHash(hashText(capability));
   const hashAgentCapabilities = () => setAgentCapabilitiesHash(hashText(agentCapabilities));
   const hashResource = () => setResourceHash(hashText(resourceDescriptor));
@@ -426,10 +606,11 @@ await merchantWallet.writeContract({
           </div>
         </div>
 
-        <div className="mb-6 grid gap-3 md:grid-cols-4">
+        <div className="mb-6 grid gap-3 md:grid-cols-5">
           {[
             ["merchant", "Merchant profile"],
             ["service", "Service catalog"],
+            ["catalog", "Publish catalog"],
             ["agent", "Agent policy"],
             ["quote", "Quote acceptance"],
           ].map(([id, label]) => (
@@ -501,6 +682,9 @@ await merchantWallet.writeContract({
                 <Field label="Merchant ID" value={merchantId} onChange={setMerchantId} />
                 <Field label="Service ID" value={serviceId} onChange={setServiceId} />
                 <Field label="Service name" value={serviceName} onChange={setServiceName} />
+                <TextArea label="Service description" value={serviceDescription} onChange={setServiceDescription} />
+                <Field label="Endpoint" value={serviceEndpoint} onChange={setServiceEndpoint} />
+                <Field label="Method" value={serviceMethod} onChange={setServiceMethod} />
                 <Field label="Capability" value={capability} onChange={setCapability} />
                 <TextArea label="Input schema" value={inputSchema} onChange={setInputSchema} />
                 <TextArea label="Output schema" value={outputSchema} onChange={setOutputSchema} />
@@ -532,6 +716,77 @@ await merchantWallet.writeContract({
                 title="Service API check"
                 description="After registration and indexing, confirm active services for this merchant."
                 path={`/services?merchant_id=${encodeURIComponent(merchantId)}&active=true&limit=10`}
+              />
+            </div>
+          </section>
+        ) : null}
+
+        {step === "catalog" ? (
+          <section className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <h2 className="text-lg font-semibold">Publish catalog</h2>
+              <p className="mt-2 text-sm text-muted">
+                Generate a schema-compatible catalog that agents and marketplaces can read before
+                checking the onchain service record. Publish the downloaded JSON to IPFS, Arweave,
+                S3, or HTTPS, then register its URI and hash as service metadata.
+              </p>
+              <div className="mt-5 grid gap-4">
+                <Field label="Catalog URI" value={catalogUri} onChange={setCatalogUri} />
+                <Field label="Catalog hash" value={catalogHash} onChange={setCatalogHash} />
+                <Field label="Terms URI" value={termsUri} onChange={setTermsUri} />
+                <Field label="Privacy URI" value={privacyUri} onChange={setPrivacyUri} />
+                <Field label="Timeout ms" value={timeoutMs} onChange={setTimeoutMs} />
+                <Field label="Availability target" value={availabilityTarget} onChange={setAvailabilityTarget} />
+                <Field label="Automatic refund if timeout" value={automaticRefund} onChange={setAutomaticRefund} />
+                <Field label="Dispute window seconds" value={disputeWindowSeconds} onChange={setDisputeWindowSeconds} />
+                <Field label="Stores request" value={storesRequest} onChange={setStoresRequest} />
+                <Field label="Stores response" value={storesResponse} onChange={setStoresResponse} />
+                <Field label="PII allowed" value={piiAllowed} onChange={setPiiAllowed} />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={hashCatalog}
+                    className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                  >
+                    Hash and use catalog
+                  </button>
+                  <DownloadButton
+                    filename={`${serviceId || "cortex-service"}-catalog.json`}
+                    value={serviceCatalog}
+                    label="Download catalog JSON"
+                  />
+                </div>
+              </div>
+              <div className="mt-6 rounded-lg border border-border bg-[#0d1117] p-4">
+                <h3 className="text-sm font-semibold">Publishing checklist</h3>
+                <div className="mt-3">
+                  <Checklist
+                    items={[
+                      "Download the catalog JSON and publish those exact bytes to a stable URI.",
+                      "Click Hash and use catalog after final edits so service metadata hash matches the published file.",
+                      "Register the service with the catalog URI and catalog hash.",
+                      "Agents should fetch the catalog URI, hash the response bytes, and compare that hash with Cortex before paying.",
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4">
+              <CodePanel title="Service catalog JSON" value={serviceCatalog} />
+              <CodePanel
+                title="Register service with catalog"
+                value={`export SERVICE_METADATA_URI=${catalogUri}
+export SERVICE_METADATA_HASH=${catalogHash}
+
+cast send "${CONTRACTS.commerceRegistry}" \\
+  "registerService(uint256,string,string,bytes32,bytes32)" \\
+  "${merchantId}" \\
+  "${serviceId}" \\
+  "$SERVICE_METADATA_URI" \\
+  "$SERVICE_METADATA_HASH" \\
+  "${capabilityHash}" \\
+  --rpc-url "https://sepolia.base.org" \\
+  --private-key "$MERCHANT_KEY"`}
               />
             </div>
           </section>
@@ -595,6 +850,8 @@ await merchantWallet.writeContract({
                 <Field label="Amount" value={amount} onChange={setAmount} />
                 <Field label="Payment rail" value={paymentRail} onChange={setPaymentRail} />
                 <Field label="Payment nonce" value={paymentNonce} onChange={setPaymentNonce} />
+                <Field label="Quote request ID" value={quoteRequestId} onChange={setQuoteRequestId} />
+                <TextArea label="Quote request input" value={quoteRequestInput} onChange={setQuoteRequestInput} />
                 <TextArea label="Resource descriptor" value={resourceDescriptor} onChange={setResourceDescriptor} />
                 <TextArea label="Terms document" value={termsDocument} onChange={setTermsDocument} />
                 <TextArea label="x402 payload" value={x402Payload} onChange={setX402Payload} />
@@ -642,8 +899,22 @@ await merchantWallet.writeContract({
               </div>
             </div>
             <div className="grid gap-4">
+              <CodePanel title="Agent quote request" value={quoteRequest} />
+              <CodePanel title="Merchant quote response" value={quoteResponse} />
               <CodePanel title="Quote payload" value={quotePayload} />
               <CodePanel title="Compute and commit quote" value={quoteCommand} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <DownloadButton
+                  filename={`${quoteRequestId || "quote"}-request.json`}
+                  value={quoteRequest}
+                  label="Download request"
+                />
+                <DownloadButton
+                  filename={`${quoteRequestId || "quote"}-response.json`}
+                  value={quoteResponse}
+                  label="Download response"
+                />
+              </div>
               <LookupPanel
                 title="Merchant reputation check"
                 description="Before accepting a quote, inspect indexed merchant reputation."
@@ -667,4 +938,32 @@ function safeJson(value: string) {
 
 function hashText(value: string) {
   return keccak256(toBytes(value));
+}
+
+function domainFromUrl(value: string) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return value.replace(/^https?:\/\//, "").split("/")[0] || value;
+  }
+}
+
+function paymentRailName(value: string) {
+  switch (value) {
+    case "0":
+      return "transfer";
+    case "1":
+      return "swap";
+    case "2":
+      return "facilitator";
+    case "3":
+      return "x402";
+    default:
+      return "x402";
+  }
+}
+
+function numberOrString(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : value;
 }
