@@ -685,6 +685,7 @@ export default function OnboardingPage() {
   const [merchantOwner, setMerchantOwner] = useState("0x...");
   const [payout, setPayout] = useState("0x...");
   const [refundPolicy, setRefundPolicy] = useState("Refunds available when fulfillment does not match accepted quote terms.");
+  const [merchantFulfillmentKey, setMerchantFulfillmentKey] = useState("did:key:z6MkMerchantFulfillmentKey");
   const [merchantUri, setMerchantUri] = useState("ipfs://merchant-metadata");
   const [merchantHash, setMerchantHash] = useState(ZERO_HASH);
   const [merchantId, setMerchantId] = useState("1");
@@ -731,7 +732,7 @@ export default function OnboardingPage() {
   const [paymentNonce, setPaymentNonce] = useState("1");
   const [resourceDescriptor, setResourceDescriptor] = useState("merchant-service-resource-v1");
   const [termsDocument, setTermsDocument] = useState("One company enrichment response for the requested domain.");
-  const [primarySettlementAmount, setPrimarySettlementAmount] = useState("850000");
+  const [primarySettlementAmount, setPrimarySettlementAmount] = useState("830000");
   const [partnerSettlementAmount, setPartnerSettlementAmount] = useState("100000");
   const [partnerSettlementRecipient, setPartnerSettlementRecipient] = useState("0x...");
   const [taxSettlementAmount, setTaxSettlementAmount] = useState("40000");
@@ -739,6 +740,14 @@ export default function OnboardingPage() {
   const [taxJurisdiction, setTaxJurisdiction] = useState("state-or-county");
   const [tipSettlementAmount, setTipSettlementAmount] = useState("10000");
   const [tipSettlementRecipient, setTipSettlementRecipient] = useState("0x...");
+  const [shippingSettlementAmount, setShippingSettlementAmount] = useState("15000");
+  const [shippingSettlementRecipient, setShippingSettlementRecipient] = useState("0x...");
+  const [shippingMethod, setShippingMethod] = useState("merchant-selected ground");
+  const [handlingSettlementAmount, setHandlingSettlementAmount] = useState("5000");
+  const [handlingSettlementRecipient, setHandlingSettlementRecipient] = useState("0x...");
+  const [encryptedFulfillmentUri, setEncryptedFulfillmentUri] = useState("https://api.cortex.wallyweb.com/fulfillment/0x...");
+  const [encryptedFulfillmentHash, setEncryptedFulfillmentHash] = useState(ZERO_HASH);
+  const [fulfillmentEncryption, setFulfillmentEncryption] = useState("x25519-xsalsa20-poly1305");
   const [x402Payload, setX402Payload] = useState("x402 payment requirement payload");
   const [quoteHash, setQuoteHash] = useState(ZERO_HASH);
   const [resultDescriptor, setResultDescriptor] = useState("merchant fulfilled accepted quote");
@@ -759,6 +768,10 @@ export default function OnboardingPage() {
           payout_chain: "base-sepolia",
           payout_address: payout,
           refund_policy: refundPolicy,
+          fulfillment_encryption: {
+            key_id: merchantFulfillmentKey,
+            use: "shipping_address_and_delivery_instructions",
+          },
           cortex: {
             registry: CONTRACTS.commerceRegistry,
             network: "base-sepolia",
@@ -767,7 +780,7 @@ export default function OnboardingPage() {
         null,
         2,
       ),
-    [merchantName, website, support, merchantOwner, payout, refundPolicy],
+    [merchantName, website, support, merchantOwner, payout, refundPolicy, merchantFulfillmentKey],
   );
 
   const serviceMetadata = useMemo(
@@ -984,6 +997,8 @@ cast send "$POLICY_MODULE_ADDRESS" \\
         partnerSettlementAmount,
         taxSettlementAmount,
         tipSettlementAmount,
+        shippingSettlementAmount,
+        handlingSettlementAmount,
       ]);
 
       return JSON.stringify(
@@ -1006,6 +1021,14 @@ cast send "$POLICY_MODULE_ADDRESS" \\
             terms_uri: termsUri,
             refund_policy: refundPolicy,
             dispute_window_seconds: numberOrString(disputeWindowSeconds),
+          },
+          fulfillment: {
+            encrypted_payload_uri: encryptedFulfillmentUri,
+            encrypted_payload_hash: encryptedFulfillmentHash,
+            encryption: fulfillmentEncryption,
+            merchant_key_id: merchantFulfillmentKey,
+            contains: ["shipping_name", "shipping_address", "delivery_instructions"],
+            plaintext_not_onchain: true,
           },
           lines: [
             {
@@ -1045,6 +1068,24 @@ cast send "$POLICY_MODULE_ADDRESS" \\
               amount: tipSettlementAmount,
               basis_points: basisPoints(tipSettlementAmount, amount),
             },
+            {
+              kind: "shipping",
+              label: "Shipping",
+              method: shippingMethod,
+              recipient: shippingSettlementRecipient,
+              token,
+              amount: shippingSettlementAmount,
+              basis_points: basisPoints(shippingSettlementAmount, amount),
+              fulfillment_hash: encryptedFulfillmentHash,
+            },
+            {
+              kind: "handling",
+              label: "Handling",
+              recipient: handlingSettlementRecipient,
+              token,
+              amount: handlingSettlementAmount,
+              basis_points: basisPoints(handlingSettlementAmount, amount),
+            },
           ],
           verification: {
             line_total: lineTotal,
@@ -1078,11 +1119,35 @@ cast send "$POLICY_MODULE_ADDRESS" \\
       taxSettlementAmount,
       tipSettlementRecipient,
       tipSettlementAmount,
+      shippingSettlementRecipient,
+      shippingSettlementAmount,
+      shippingMethod,
+      handlingSettlementRecipient,
+      handlingSettlementAmount,
+      encryptedFulfillmentUri,
+      encryptedFulfillmentHash,
+      fulfillmentEncryption,
+      merchantFulfillmentKey,
     ],
   );
   const settlementLineTotal = useMemo(
-    () => sumDecimalStrings([primarySettlementAmount, partnerSettlementAmount, taxSettlementAmount, tipSettlementAmount]),
-    [primarySettlementAmount, partnerSettlementAmount, taxSettlementAmount, tipSettlementAmount],
+    () =>
+      sumDecimalStrings([
+        primarySettlementAmount,
+        partnerSettlementAmount,
+        taxSettlementAmount,
+        tipSettlementAmount,
+        shippingSettlementAmount,
+        handlingSettlementAmount,
+      ]),
+    [
+      primarySettlementAmount,
+      partnerSettlementAmount,
+      taxSettlementAmount,
+      tipSettlementAmount,
+      shippingSettlementAmount,
+      handlingSettlementAmount,
+    ],
   );
   const settlementMatchesQuote = settlementLineTotal === amount;
 
@@ -1602,6 +1667,7 @@ await merchantWallet.writeContract({
                 <StatusPill ok={merchantOwnerValid} label={merchantOwnerValid ? "Valid owner address" : "Enter the transaction sender address"} />
                 <Field label="Payout address" value={payout} onChange={setPayout} />
                 <StatusPill ok={merchantPayoutValid} label={merchantPayoutValid ? "Valid payout address" : "Enter a 0x payout address"} />
+                <Field label="Fulfillment encryption key" value={merchantFulfillmentKey} onChange={setMerchantFulfillmentKey} />
                 <TextArea label="Refund policy" value={refundPolicy} onChange={setRefundPolicy} />
                 <Field label="Metadata URI" value={merchantUri} onChange={setMerchantUri} />
                 <Field label="Metadata hash" value={merchantHash} onChange={setMerchantHash} />
@@ -1865,6 +1931,20 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                     <Field label="Tax jurisdiction" value={taxJurisdiction} onChange={setTaxJurisdiction} />
                     <Field label="Tip recipient" value={tipSettlementRecipient} onChange={setTipSettlementRecipient} />
                     <Field label="Tip amount" value={tipSettlementAmount} onChange={setTipSettlementAmount} />
+                    <Field label="Shipping recipient" value={shippingSettlementRecipient} onChange={setShippingSettlementRecipient} />
+                    <Field label="Shipping amount" value={shippingSettlementAmount} onChange={setShippingSettlementAmount} />
+                    <Field label="Shipping method" value={shippingMethod} onChange={setShippingMethod} />
+                    <Field label="Handling recipient" value={handlingSettlementRecipient} onChange={setHandlingSettlementRecipient} />
+                    <Field label="Handling amount" value={handlingSettlementAmount} onChange={setHandlingSettlementAmount} />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+                  <h3 className="text-sm font-semibold">Encrypted fulfillment payload</h3>
+                  <div className="mt-4 grid gap-4">
+                    <Field label="Encrypted payload URI" value={encryptedFulfillmentUri} onChange={setEncryptedFulfillmentUri} />
+                    <Field label="Encrypted payload hash" value={encryptedFulfillmentHash} onChange={setEncryptedFulfillmentHash} />
+                    <Field label="Encryption scheme" value={fulfillmentEncryption} onChange={setFulfillmentEncryption} />
+                    <Field label="Merchant key ID" value={merchantFulfillmentKey} onChange={setMerchantFulfillmentKey} />
                   </div>
                 </div>
                 <TextArea label="x402 payload" value={x402Payload} onChange={setX402Payload} />
@@ -1906,6 +1986,7 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                       "Payment rail and facilitator match the actual payment requirement.",
                       "Settlement plan hash equals termsHash and line total equals the quote amount.",
                       "Tax recipients are verified remittance or reserve wallets for the merchant's jurisdiction.",
+                      "Shipping address is encrypted to the merchant fulfillment key and only the URI/hash are public.",
                       "The account policy allows this merchant, token, facilitator, target, amount, and daily total.",
                       "For x402, the normalized payment payload hash equals the quote x402 payload hash.",
                       "The quote has not expired and the nonce has not been reused.",

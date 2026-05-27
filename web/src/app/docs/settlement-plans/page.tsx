@@ -23,11 +23,20 @@ const PLAN = `{
     "summary": "One company enrichment response.",
     "refund_policy": "Refunds available when fulfillment does not match accepted quote terms."
   },
+  "fulfillment": {
+    "encrypted_payload_uri": "https://api.cortex.wallyweb.com/fulfillment/0x...",
+    "encrypted_payload_hash": "0x...",
+    "encryption": "x25519-xsalsa20-poly1305",
+    "merchant_key_id": "did:key:z6MkMerchantFulfillmentKey",
+    "plaintext_not_onchain": true
+  },
   "lines": [
-    { "kind": "merchant", "recipient": "0x...", "amount": "850000", "basis_points": 8500 },
+    { "kind": "merchant", "recipient": "0x...", "amount": "830000", "basis_points": 8300 },
     { "kind": "supplier", "recipient": "0x...", "amount": "100000", "basis_points": 1000 },
     { "kind": "tax", "jurisdiction": "state-or-county", "recipient": "0x...", "amount": "40000", "basis_points": 400 },
-    { "kind": "tip", "optional": true, "recipient": "0x...", "amount": "10000", "basis_points": 100 }
+    { "kind": "tip", "optional": true, "recipient": "0x...", "amount": "10000", "basis_points": 100 },
+    { "kind": "shipping", "method": "merchant-selected ground", "recipient": "0x...", "amount": "15000", "basis_points": 150 },
+    { "kind": "handling", "recipient": "0x...", "amount": "5000", "basis_points": 50 }
   ],
   "verification": {
     "line_total": "1000000",
@@ -74,6 +83,8 @@ export default function SettlementPlansPage() {
               ["supplier", "Partner merchant, supplier, affiliate, or service provider."],
               ["tax", "Tax reserve, verified tax provider, or independently verified government wallet."],
               ["tip", "Optional gratuity."],
+              ["shipping", "Shipping, postage, freight, or carrier cost."],
+              ["handling", "Packaging, pick/pack, warehouse, or fulfillment labor cost."],
               ["platform_fee", "Marketplace or SaaS platform fee."],
               ["facilitator_fee", "Payment facilitator fee."],
               ["protocol_fee", "Future Cortex protocol fee if enabled."],
@@ -92,6 +103,14 @@ export default function SettlementPlansPage() {
         Tax lines should be treated conservatively. Cortex should not assume government
         wallets exist; use merchant reserve wallets, verified tax providers, or independently
         validated public-sector wallets.
+      </p>
+
+      <h2 className="text-xl font-semibold mb-4 mt-10">Encrypted Shipping Address</h2>
+      <p className="text-sm text-muted">
+        Shipping names, street addresses, phone numbers, and delivery instructions should not be
+        public. Merchants publish a fulfillment encryption key in merchant metadata. Agents encrypt
+        the buyer fulfillment payload to that key, store it offchain, and bind only the encrypted
+        payload URI/hash into the settlement plan.
       </p>
     </div>
   );

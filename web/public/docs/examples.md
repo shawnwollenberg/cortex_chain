@@ -220,11 +220,20 @@ const settlementPlan = {
     gross_amount: "1000000",
   },
   lines: [
-    { kind: "merchant", recipient: merchantPayoutAddress, amount: "850000" },
+    { kind: "merchant", recipient: merchantPayoutAddress, amount: "830000" },
     { kind: "supplier", recipient: partnerMerchantAddress, amount: "100000" },
     { kind: "tax", jurisdiction: "state-or-county", recipient: taxReserveAddress, amount: "40000" },
     { kind: "tip", optional: true, recipient: tipRecipientAddress, amount: "10000" },
+    { kind: "shipping", method: "merchant-selected ground", recipient: shippingWallet, amount: "15000" },
+    { kind: "handling", recipient: fulfillmentWallet, amount: "5000" },
   ],
+  fulfillment: {
+    encrypted_payload_uri: "https://api.cortex.wallyweb.com/fulfillment/0x...",
+    encrypted_payload_hash: "0x...",
+    encryption: "x25519-xsalsa20-poly1305",
+    merchant_key_id: "did:key:z6MkMerchantFulfillmentKey",
+    plaintext_not_onchain: true,
+  },
   verification: {
     line_total: "1000000",
     matches_quote_amount: true,
@@ -233,6 +242,8 @@ const settlementPlan = {
 
 const termsHash = keccak256(toBytes(JSON.stringify(settlementPlan, null, 2)));
 ```
+
+For physical goods, the shipping address belongs in the encrypted fulfillment payload, not in public metadata or onchain calldata. The merchant publishes a fulfillment encryption key in merchant metadata, the agent encrypts the buyer address to that key, and the quote binds only the encrypted payload URI/hash.
 
 Payment rails:
 

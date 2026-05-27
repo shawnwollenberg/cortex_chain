@@ -57,12 +57,14 @@ The read-only preflight panel can connect to an injected wallet to check the sel
    - Build an agent quote request JSON document.
    - Build a merchant quote response JSON document.
    - Build a quote-bound settlement plan for multi-merchant, tax, tip, and fee lines.
+   - Add shipping and handling lines for physical goods when needed.
+   - Bind an encrypted fulfillment payload URI/hash for shipping addresses and delivery instructions.
    - Publish the quote request and quote response to the hosted Cortex API for URL-based agent/merchant handoff.
    - Build the onchain quote payload.
    - Generate resource, settlement-plan terms, and x402 payload hashes from their source documents.
    - Generate a viem template for `computeQuoteHash` and `commitQuote`.
    - Download quote request and response JSON files for local testing.
-   - Show the agent-side acceptance checklist for merchant/service state, metadata hashes, settlement totals, tax recipients, rail/facilitator matching, account policy, x402 payload hash, expiry, and nonce.
+   - Show the agent-side acceptance checklist for merchant/service state, metadata hashes, settlement totals, tax recipients, encrypted fulfillment payloads, rail/facilitator matching, account policy, x402 payload hash, expiry, and nonce.
    - Check indexed merchant reputation before accepting a quote.
 
 ## Product Constraints

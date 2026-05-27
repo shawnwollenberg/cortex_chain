@@ -2227,12 +2227,16 @@ Putting those terms into the quote gives agents a deterministic thing to verify 
 - `supplier`: A partner merchant, manufacturer, service provider, or affiliate.
 - `tax`: A tax reserve or remittance wallet.
 - `tip`: Optional tip or gratuity.
+- `shipping`: Shipping, postage, freight, or carrier cost.
+- `handling`: Packaging, pick/pack, warehouse, or fulfillment labor cost.
 - `platform_fee`: Marketplace or SaaS platform fee.
 - `facilitator_fee`: Payment facilitator fee.
 - `protocol_fee`: Future Cortex protocol fee if one is enabled.
 - `escrow`: Funds held until fulfillment, delivery, or dispute resolution.
 
 Tax wallets need special care. Cortex should not assume that an IRS, state, county, or city wallet exists. Today, a tax line should point to a merchant-controlled reserve wallet, a verified tax provider, or a verified government wallet only when that wallet has been independently validated.
+
+Shipping addresses should not be written onchain or placed in public quote metadata. For physical goods, the merchant publishes a fulfillment encryption key in merchant metadata; the agent encrypts the buyer's shipping name, address, contact fields, and delivery instructions to that key; and the settlement plan binds only the encrypted payload URI, payload hash, encryption scheme, and merchant key id.
 
 ## Agent Validation
 
