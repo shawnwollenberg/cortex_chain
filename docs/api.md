@@ -190,6 +190,42 @@ Response `201`:
 
 Fetch canonical ciphertext envelope JSON at `GET /fulfillment-payloads/:hash`. Metadata is available at `GET /fulfillment-payloads/:hash/metadata`.
 
+#### Publish Fulfillment Evidence
+
+```
+POST /fulfillment-evidence
+```
+
+Canonicalizes a fulfillment evidence document and stores it by `keccak256` hash. Use this hash as the `fulfillmentHash` when calling `CommerceRegistry.recordFulfillment(receiptId, fulfillmentHash)`.
+
+Request:
+```json
+{
+  "fulfillment_evidence_json": "{\n  \"schema\": \"cortex.fulfillment-evidence.v1\",\n  \"evidence_type\": \"shipment\"\n}",
+  "expected_hash": "0x...",
+  "receipt_id": "1",
+  "quote_hash": "0x...",
+  "payload_hash": "0x...",
+  "evidence_type": "shipment"
+}
+```
+
+Response `201`:
+```json
+{
+  "evidence_hash": "0x...",
+  "receipt_id": "1",
+  "quote_hash": "0x...",
+  "payload_hash": "0x...",
+  "evidence_type": "shipment",
+  "size_bytes": 1024,
+  "uri": "https://api.cortex.wallyweb.com/fulfillment-evidence/0x...",
+  "canonical_json": "{\"evidence_type\":\"shipment\",\"schema\":\"cortex.fulfillment-evidence.v1\"}"
+}
+```
+
+Fetch canonical evidence JSON at `GET /fulfillment-evidence/:hash`. Metadata is available at `GET /fulfillment-evidence/:hash/metadata`.
+
 ---
 
 ### Agents

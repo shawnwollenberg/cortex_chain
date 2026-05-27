@@ -36,6 +36,8 @@ export async function runMigrations(pool: pg.Pool): Promise<void> {
   await pool.query(migration011);
   const migration012 = readFileSync(resolve(migrationsDir, "012_fulfillment_payloads.sql"), "utf-8");
   await pool.query(migration012);
+  const migration013 = readFileSync(resolve(migrationsDir, "013_fulfillment_evidence.sql"), "utf-8");
+  await pool.query(migration013);
   logger.info("Migrations applied");
 }
 

@@ -135,14 +135,14 @@ beforeAll(async () => {
   pool = new pg.Pool({ connectionString: TEST_DATABASE_URL });
 
   // Drop and recreate tables
-  await pool.query("DROP TABLE IF EXISTS fulfillment_payload_documents, quote_response_documents, quote_request_documents, catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
+  await pool.query("DROP TABLE IF EXISTS fulfillment_evidence_documents, fulfillment_payload_documents, quote_response_documents, quote_request_documents, catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
 
   // Run migrations (read the SQL file)
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql", "011_quote_documents.sql", "012_fulfillment_payloads.sql"]) {
+  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql", "011_quote_documents.sql", "012_fulfillment_payloads.sql", "013_fulfillment_evidence.sql"]) {
     const migrationPath = resolve(__dirname, "..", "..", "indexer", "migrations", file);
     const sql = readFileSync(migrationPath, "utf-8");
     await pool.query(sql);
@@ -636,6 +636,65 @@ describe("Fulfillment Payloads", () => {
           ciphertext: "base64:ciphertext",
         }),
         expected_hash: `0x${"99".repeat(32)}`,
+      }),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe("Fulfillment Evidence", () => {
+  it("POST /fulfillment-evidence stores canonical evidence JSON and GET returns it", async () => {
+    const evidenceInput = {
+      schema: "cortex.fulfillment-evidence.v1",
+      receipt_id: "1",
+      quote_hash: `0x${"11".repeat(32)}`,
+      payload_hash: `0x${"88".repeat(32)}`,
+      evidence_type: "shipment",
+      status: "shipped",
+      carrier: "ups",
+      tracking_hash: keccak256(toBytes("1Z999")),
+      plaintext_not_onchain: true,
+    };
+    const evidence = JSON.stringify(evidenceInput, null, 2);
+    const canonicalEvidence = canonicalizeJson(evidenceInput);
+    const expectedHash = keccak256(toBytes(canonicalEvidence));
+
+    const res = await fetch(`${baseUrl}/fulfillment-evidence`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fulfillment_evidence_json: evidence,
+        expected_hash: expectedHash,
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.evidence_hash).toBe(expectedHash);
+    expect(body.receipt_id).toBe("1");
+    expect(body.payload_hash).toBe(`0x${"88".repeat(32)}`);
+    expect(body.evidence_type).toBe("shipment");
+    expect(body.uri).toBe(`${baseUrl}/fulfillment-evidence/${expectedHash}`);
+
+    const evidenceRes = await fetch(body.uri);
+    expect(evidenceRes.status).toBe(200);
+    expect(await evidenceRes.text()).toBe(canonicalEvidence);
+
+    const metadataRes = await fetch(`${body.uri}/metadata`);
+    expect(metadataRes.status).toBe(200);
+    const metadata = await metadataRes.json();
+    expect(metadata.evidence_hash).toBe(expectedHash);
+  });
+
+  it("POST /fulfillment-evidence rejects mismatched expected_hash", async () => {
+    const res = await fetch(`${baseUrl}/fulfillment-evidence`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fulfillment_evidence_json: JSON.stringify({
+          schema: "cortex.fulfillment-evidence.v1",
+          evidence_type: "delivery",
+        }),
+        expected_hash: `0x${"77".repeat(32)}`,
       }),
     });
     expect(res.status).toBe(409);

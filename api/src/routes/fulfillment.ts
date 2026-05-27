@@ -5,6 +5,7 @@ import { parseCanonicalJsonDocument } from "../canonical-json.js";
 import { isValidAddress, isValidId } from "../utils.js";
 
 const MAX_FULFILLMENT_PAYLOAD_BYTES = 128 * 1024;
+const MAX_FULFILLMENT_EVIDENCE_BYTES = 128 * 1024;
 
 function isBytes32(value: string): boolean {
   return /^0x[0-9a-fA-F]{64}$/.test(value);
@@ -151,6 +152,125 @@ export function createFulfillmentRouter(pool: pg.Pool): Router {
         return;
       }
       res.json({ ...result.rows[0], uri: `${publicBaseUrl(req)}/fulfillment-payloads/${hash}` });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/fulfillment-evidence", async (req, res, next) => {
+    try {
+      let document;
+      try {
+        document = parseCanonicalJsonDocument(
+          req.body?.fulfillment_evidence_json,
+          "fulfillment_evidence_json",
+          MAX_FULFILLMENT_EVIDENCE_BYTES,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid fulfillment_evidence_json";
+        res.status(message.includes("exceeds") ? 413 : 400).json({ error: message });
+        return;
+      }
+
+      const expectedHash = typeof req.body?.expected_hash === "string" ? req.body.expected_hash.toLowerCase() : "";
+      if (expectedHash && !isBytes32(expectedHash)) {
+        res.status(400).json({ error: "expected_hash must be bytes32" });
+        return;
+      }
+
+      let receiptId: string | null;
+      try {
+        receiptId = readOptionalId(req.body?.receipt_id ?? document.parsed.receipt_id, "receipt_id");
+      } catch (error) {
+        res.status(400).json({ error: error instanceof Error ? error.message : "Invalid receipt_id" });
+        return;
+      }
+
+      const quoteHash = stringField(req.body?.quote_hash ?? document.parsed.quote_hash, 66).toLowerCase();
+      const payloadHash = stringField(req.body?.payload_hash ?? document.parsed.payload_hash, 66).toLowerCase();
+      const evidenceType = stringField(req.body?.evidence_type ?? document.parsed.evidence_type ?? document.parsed.type, 80);
+
+      if (quoteHash && !isBytes32(quoteHash)) {
+        res.status(400).json({ error: "quote_hash must be bytes32" });
+        return;
+      }
+      if (payloadHash && !isBytes32(payloadHash)) {
+        res.status(400).json({ error: "payload_hash must be bytes32" });
+        return;
+      }
+      if (!evidenceType) {
+        res.status(400).json({ error: "evidence_type is required" });
+        return;
+      }
+
+      const evidenceHash = document.hash;
+      if (expectedHash && expectedHash !== evidenceHash) {
+        res.status(409).json({ error: "expected_hash does not match fulfillment_evidence_json", evidence_hash: evidenceHash });
+        return;
+      }
+
+      const result = await pool.query(
+        `INSERT INTO fulfillment_evidence_documents
+          (evidence_hash, receipt_id, quote_hash, payload_hash, evidence_type, evidence_text, size_bytes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (evidence_hash) DO UPDATE
+         SET receipt_id = EXCLUDED.receipt_id,
+             quote_hash = EXCLUDED.quote_hash,
+             payload_hash = EXCLUDED.payload_hash,
+             evidence_type = EXCLUDED.evidence_type,
+             evidence_text = EXCLUDED.evidence_text,
+             size_bytes = EXCLUDED.size_bytes,
+             updated_at = now()
+         RETURNING evidence_hash, receipt_id, quote_hash, payload_hash, evidence_type, size_bytes, created_at, updated_at`,
+        [evidenceHash, receiptId, quoteHash, payloadHash, evidenceType, document.text, document.sizeBytes],
+      );
+
+      res.status(201).json({
+        ...result.rows[0],
+        uri: `${publicBaseUrl(req)}/fulfillment-evidence/${evidenceHash}`,
+        canonical_json: document.text,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/fulfillment-evidence/:hash", async (req, res, next) => {
+    try {
+      const hash = req.params.hash.toLowerCase();
+      if (!isBytes32(hash)) {
+        res.status(400).json({ error: "Invalid fulfillment evidence hash" });
+        return;
+      }
+      const result = await pool.query("SELECT evidence_text FROM fulfillment_evidence_documents WHERE evidence_hash = $1", [hash]);
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: "Fulfillment evidence not found" });
+        return;
+      }
+      res.type("application/json").send(result.rows[0].evidence_text);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/fulfillment-evidence/:hash/metadata", async (req, res, next) => {
+    try {
+      const hash = req.params.hash.toLowerCase();
+      if (!isBytes32(hash)) {
+        res.status(400).json({ error: "Invalid fulfillment evidence hash" });
+        return;
+      }
+      const result = await pool.query(
+        `SELECT evidence_hash, receipt_id, quote_hash, payload_hash, evidence_type, size_bytes, created_at, updated_at
+         FROM fulfillment_evidence_documents
+         WHERE evidence_hash = $1`,
+        [hash],
+      );
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: "Fulfillment evidence not found" });
+        return;
+      }
+      res.json({ ...result.rows[0], uri: `${publicBaseUrl(req)}/fulfillment-evidence/${hash}` });
     } catch (err) {
       next(err);
     }

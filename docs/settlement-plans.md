@@ -41,7 +41,7 @@ Putting those terms into the quote gives agents a deterministic thing to verify 
     "dispute_window_seconds": 86400
   },
   "fulfillment": {
-    "encrypted_payload_uri": "https://api.cortex.wallyweb.com/fulfillment/0x...",
+    "encrypted_payload_uri": "https://api.cortex.wallyweb.com/fulfillment-payloads/0x...",
     "encrypted_payload_hash": "0x...",
     "encryption": "x25519-xsalsa20-poly1305",
     "merchant_key_id": "did:key:z6MkMerchantFulfillmentKey",

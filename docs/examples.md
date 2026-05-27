@@ -228,7 +228,7 @@ const settlementPlan = {
     { kind: "handling", recipient: fulfillmentWallet, amount: "5000" },
   ],
   fulfillment: {
-    encrypted_payload_uri: "https://api.cortex.wallyweb.com/fulfillment/0x...",
+    encrypted_payload_uri: "https://api.cortex.wallyweb.com/fulfillment-payloads/0x...",
     encrypted_payload_hash: "0x...",
     encryption: "x25519-xsalsa20-poly1305",
     merchant_key_id: "did:key:z6MkMerchantFulfillmentKey",
@@ -255,6 +255,60 @@ const termsHash = keccak256(toBytes(canonicalizeJson(settlementPlan)));
 ```
 
 For physical goods, the shipping address belongs in the encrypted fulfillment payload, not in public metadata or onchain calldata. The merchant publishes a fulfillment encryption key in merchant metadata, the agent encrypts the buyer address to that key, and the quote binds only the encrypted payload URI/hash.
+
+Browser WebCrypto shape:
+
+```ts
+const plaintextFulfillment = {
+  schema: "cortex.fulfillment-plaintext.v1",
+  merchant_id: "1",
+  agent: agentAddress,
+  quote_hash: quoteHash,
+  recipient: {
+    name: "Jane Buyer",
+    address: {
+      line1: "123 Commerce Ave",
+      city: "Columbus",
+      region: "OH",
+      postal_code: "43215",
+      country: "US",
+    },
+  },
+  delivery_instructions: "Leave at front desk.",
+};
+
+// In browser flows, import the merchant's published P-256 ECDH public JWK,
+// derive an AES-GCM key with an ephemeral keypair, and publish only this envelope.
+const encryptedFulfillmentEnvelope = {
+  schema: "cortex.encrypted-fulfillment.v1",
+  merchant_id: "1",
+  agent: agentAddress,
+  quote_hash: quoteHash,
+  encryption: "webcrypto-ecdh-p256-aes-gcm",
+  merchant_key_id: "did:key:z6MkMerchantFulfillmentKey",
+  ephemeral_public_key_jwk: ephemeralPublicJwk,
+  iv: "base64...",
+  ciphertext: "base64...",
+  contains: ["shipping_name", "shipping_address", "delivery_instructions"],
+  plaintext_schema: "cortex.fulfillment-plaintext.v1",
+};
+
+const encryptedPayloadHash = keccak256(toBytes(canonicalizeJson(encryptedFulfillmentEnvelope)));
+
+const publishedPayload = await fetch(`${API_URL}/fulfillment-payloads`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    fulfillment_payload_json: canonicalizeJson(encryptedFulfillmentEnvelope),
+    expected_hash: encryptedPayloadHash,
+    merchant_id: "1",
+    agent: agentAddress,
+    quote_hash: quoteHash,
+    encryption: "webcrypto-ecdh-p256-aes-gcm",
+    merchant_key_id: "did:key:z6MkMerchantFulfillmentKey",
+  }),
+}).then((response) => response.json());
+```
 
 Payment rails:
 
@@ -315,7 +369,7 @@ Agents should compare the quoted terms against their local request and policy be
 
 ## 7. Record a Receipt and Fulfillment
 
-After payment settlement, the facilitator records the receipt. The merchant or facilitator can later attach fulfillment evidence.
+After payment settlement, the facilitator records the receipt. The merchant or facilitator can later attach canonical fulfillment evidence. For physical goods, keep tracking numbers, delivery photos, and address data private; publish hashes and encrypted references.
 
 ```ts
 const receiptHash = await facilitatorWallet.writeContract({
@@ -323,6 +377,35 @@ const receiptHash = await facilitatorWallet.writeContract({
   abi: CommerceRegistryABI,
   functionName: "recordReceipt",
   args: [quoteHash, resultHash],
+});
+
+const fulfillmentEvidence = {
+  schema: "cortex.fulfillment-evidence.v1",
+  receipt_id: receiptId.toString(),
+  quote_hash: quoteHash,
+  payload_hash: encryptedPayloadHash,
+  evidence_type: "shipment",
+  status: "shipped",
+  carrier: "ups",
+  tracking_hash: keccak256(toBytes("1Z999AA10123456784")),
+  delivery_proof_hash: keccak256(toBytes("carrier accepted package")),
+  fulfillment_payload_uri: publishedPayload.uri,
+  plaintext_not_onchain: true,
+};
+
+const fulfillmentHash = keccak256(toBytes(canonicalizeJson(fulfillmentEvidence)));
+
+await fetch(`${API_URL}/fulfillment-evidence`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    fulfillment_evidence_json: canonicalizeJson(fulfillmentEvidence),
+    expected_hash: fulfillmentHash,
+    receipt_id: receiptId.toString(),
+    quote_hash: quoteHash,
+    payload_hash: encryptedPayloadHash,
+    evidence_type: "shipment",
+  }),
 });
 
 await merchantWallet.writeContract({

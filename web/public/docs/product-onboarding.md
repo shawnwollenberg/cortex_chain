@@ -77,6 +77,7 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 
 ## Next Product Improvements
 
-- Add client-side encryption and publishing for fulfillment payloads.
+- Use the onboarding page to generate or paste a merchant fulfillment public key, encrypt shipping details in the browser, publish the canonical ciphertext envelope, and bind its hash into the settlement plan.
+- Publish canonical fulfillment evidence documents after settlement, then call `recordFulfillment(receiptId, evidenceHash)` so receipts point at a retrievable evidence record.
 - Expand SDK examples into runnable sample scripts for transfer, swap, facilitator, and x402 payments.
 - Add guided post-transaction verification against the hosted API.

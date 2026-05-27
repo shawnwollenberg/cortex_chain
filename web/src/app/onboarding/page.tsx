@@ -131,6 +131,16 @@ const COMMERCE_WRITE_ABI = [
     outputs: [{ name: "receiptId", type: "uint256" }],
     stateMutability: "nonpayable",
   },
+  {
+    type: "function",
+    name: "recordFulfillment",
+    inputs: [
+      { name: "receiptId", type: "uint256" },
+      { name: "fulfillmentHash", type: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
 const AGENT_WRITE_ABI = [
@@ -165,7 +175,7 @@ const POLICY_WRITE_ABI = [
 ] as const;
 
 type StepId = "merchant" | "service" | "catalog" | "agent" | "quote";
-type TxKey = "merchant" | "service" | "agent" | "policy" | "quote" | "receipt";
+type TxKey = "merchant" | "service" | "agent" | "policy" | "quote" | "receipt" | "fulfillment";
 type LookupState = {
   loading: boolean;
   error: string | null;
@@ -392,7 +402,7 @@ function PreflightPanel({
             onClick={onCheck}
             className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
           >
-            {state.loading ? "Checking" : "Run checks"}
+          {state.loading ? "Checking" : "Check setup"}
           </button>
           <button
             type="button"
@@ -679,6 +689,7 @@ export default function OnboardingPage() {
     policy: { loading: false, error: null, hash: null },
     quote: { loading: false, error: null, hash: null },
     receipt: { loading: false, error: null, hash: null },
+    fulfillment: { loading: false, error: null, hash: null },
   });
   const [merchantName, setMerchantName] = useState("Example Data Merchant");
   const [website, setWebsite] = useState("https://merchant.example");
@@ -746,9 +757,49 @@ export default function OnboardingPage() {
   const [shippingMethod, setShippingMethod] = useState("merchant-selected ground");
   const [handlingSettlementAmount, setHandlingSettlementAmount] = useState("5000");
   const [handlingSettlementRecipient, setHandlingSettlementRecipient] = useState("0x...");
-  const [encryptedFulfillmentUri, setEncryptedFulfillmentUri] = useState("https://api.cortex.wallyweb.com/fulfillment/0x...");
+  const [encryptedFulfillmentUri, setEncryptedFulfillmentUri] = useState("https://api.cortex.wallyweb.com/fulfillment-payloads/0x...");
   const [encryptedFulfillmentHash, setEncryptedFulfillmentHash] = useState(ZERO_HASH);
   const [fulfillmentEncryption, setFulfillmentEncryption] = useState("x25519-xsalsa20-poly1305");
+  const [merchantFulfillmentPublicKey, setMerchantFulfillmentPublicKey] = useState("");
+  const [merchantFulfillmentPrivateKey, setMerchantFulfillmentPrivateKey] = useState("");
+  const [shippingName, setShippingName] = useState("Jane Buyer");
+  const [shippingLine1, setShippingLine1] = useState("123 Commerce Ave");
+  const [shippingLine2, setShippingLine2] = useState("");
+  const [shippingCity, setShippingCity] = useState("Columbus");
+  const [shippingRegion, setShippingRegion] = useState("OH");
+  const [shippingPostalCode, setShippingPostalCode] = useState("43215");
+  const [shippingCountry, setShippingCountry] = useState("US");
+  const [deliveryInstructions, setDeliveryInstructions] = useState("Leave at front desk.");
+  const [fulfillmentPayloadPublish, setFulfillmentPayloadPublish] = useState<QuotePublishState>({
+    loading: false,
+    error: null,
+    uri: null,
+    hash: null,
+  });
+  const [receiptId, setReceiptId] = useState("1");
+  const [fulfillmentStatus, setFulfillmentStatus] = useState("shipped");
+  const [fulfillmentCarrier, setFulfillmentCarrier] = useState("ups");
+  const [trackingNumber, setTrackingNumber] = useState("1Z999AA10123456784");
+  const [deliveryProofDescriptor, setDeliveryProofDescriptor] = useState("carrier accepted package");
+  const [fulfillmentEvidenceHash, setFulfillmentEvidenceHash] = useState(ZERO_HASH);
+  const [fulfillmentEvidencePublish, setFulfillmentEvidencePublish] = useState<QuotePublishState>({
+    loading: false,
+    error: null,
+    uri: null,
+    hash: null,
+  });
+  const [encryptedFulfillmentPayload, setEncryptedFulfillmentPayload] = useState(
+    JSON.stringify(
+      {
+        schema: "cortex.encrypted-fulfillment.v1",
+        encryption: "webcrypto-ecdh-p256-aes-gcm",
+        merchant_key_id: "did:key:z6MkMerchantFulfillmentKey",
+        ciphertext: "base64:...",
+      },
+      null,
+      2,
+    ),
+  );
   const [x402Payload, setX402Payload] = useState("x402 payment requirement payload");
   const [quoteHash, setQuoteHash] = useState(ZERO_HASH);
   const [resultDescriptor, setResultDescriptor] = useState("merchant fulfilled accepted quote");
@@ -924,6 +975,76 @@ export default function OnboardingPage() {
         2,
       ),
     [agentName, agentOwner, agentCapabilities, token, merchantId, facilitator, maxPerPayment, maxPerDay],
+  );
+
+  const fulfillmentPlaintext = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          schema: "cortex.fulfillment-plaintext.v1",
+          merchant_id: merchantId,
+          agent: quoteAgent,
+          quote_hash: quoteHash,
+          recipient: {
+            name: shippingName,
+            address: {
+              line1: shippingLine1,
+              line2: shippingLine2 || null,
+              city: shippingCity,
+              region: shippingRegion,
+              postal_code: shippingPostalCode,
+              country: shippingCountry,
+            },
+          },
+          delivery_instructions: deliveryInstructions,
+        },
+        null,
+        2,
+      ),
+    [
+      merchantId,
+      quoteAgent,
+      quoteHash,
+      shippingName,
+      shippingLine1,
+      shippingLine2,
+      shippingCity,
+      shippingRegion,
+      shippingPostalCode,
+      shippingCountry,
+      deliveryInstructions,
+    ],
+  );
+
+  const fulfillmentEvidence = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          schema: "cortex.fulfillment-evidence.v1",
+          receipt_id: receiptId,
+          quote_hash: quoteHash,
+          payload_hash: encryptedFulfillmentHash,
+          evidence_type: "shipment",
+          status: fulfillmentStatus,
+          carrier: fulfillmentCarrier,
+          tracking_hash: hashText(trackingNumber),
+          delivery_proof_hash: hashText(deliveryProofDescriptor),
+          fulfillment_payload_uri: encryptedFulfillmentUri,
+          plaintext_not_onchain: true,
+        },
+        null,
+        2,
+      ),
+    [
+      receiptId,
+      quoteHash,
+      encryptedFulfillmentHash,
+      fulfillmentStatus,
+      fulfillmentCarrier,
+      trackingNumber,
+      deliveryProofDescriptor,
+      encryptedFulfillmentUri,
+    ],
   );
 
   const merchantCommand = `export RPC_URL=https://sepolia.base.org
@@ -1379,6 +1500,117 @@ await merchantWallet.writeContract({
       });
     }
   };
+  const generateMerchantEncryptionKey = async () => {
+    try {
+      const keyPair = await crypto.subtle.generateKey(
+        { name: "ECDH", namedCurve: "P-256" },
+        true,
+        ["deriveKey"],
+      );
+      const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+      const privateJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+      setMerchantFulfillmentPublicKey(JSON.stringify(publicJwk, null, 2));
+      setMerchantFulfillmentPrivateKey(JSON.stringify(privateJwk, null, 2));
+      setFulfillmentEncryption("webcrypto-ecdh-p256-aes-gcm");
+    } catch (error) {
+      setFulfillmentPayloadPublish({
+        loading: false,
+        error: error instanceof Error ? error.message : "Encryption key generation failed",
+        uri: null,
+        hash: null,
+      });
+    }
+  };
+  const encryptFulfillmentPayload = async () => {
+    setFulfillmentPayloadPublish((current) => ({ ...current, loading: true, error: null }));
+    try {
+      if (!merchantFulfillmentPublicKey.trim()) throw new Error("Generate or paste a merchant public key JWK first.");
+      const encrypted = await encryptToMerchantKey({
+        merchantPublicKeyJwk: merchantFulfillmentPublicKey,
+        plaintextJson: fulfillmentPlaintext,
+        merchantId,
+        agent: quoteAgent,
+        quoteHash,
+        merchantKeyId: merchantFulfillmentKey,
+      });
+      const encryptedText = JSON.stringify(encrypted, null, 2);
+      const payloadHash = hashJsonText(encryptedText);
+      setEncryptedFulfillmentPayload(encryptedText);
+      setEncryptedFulfillmentHash(payloadHash);
+      setFulfillmentEncryption("webcrypto-ecdh-p256-aes-gcm");
+      setFulfillmentPayloadPublish({ loading: false, error: null, uri: null, hash: payloadHash });
+    } catch (error) {
+      setFulfillmentPayloadPublish({
+        loading: false,
+        error: error instanceof Error ? error.message : "Fulfillment encryption failed",
+        uri: null,
+        hash: null,
+      });
+    }
+  };
+  const publishFulfillmentPayload = async () => {
+    setFulfillmentPayloadPublish({ loading: true, error: null, uri: null, hash: null });
+    try {
+      const expectedHash = hashJsonText(encryptedFulfillmentPayload);
+      const response = await fetch(`${API_URL}/fulfillment-payloads`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fulfillment_payload_json: canonicalizeJsonText(encryptedFulfillmentPayload),
+          expected_hash: expectedHash,
+          merchant_id: merchantId,
+          agent: quoteAgent,
+          quote_hash: quoteHash,
+          encryption: fulfillmentEncryption,
+          merchant_key_id: merchantFulfillmentKey,
+        }),
+      });
+      const body = await response.json() as { uri?: string; payload_hash?: string; error?: string };
+      if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+      if (!body.uri || !body.payload_hash) throw new Error("Fulfillment payload response was missing uri or payload_hash");
+      setEncryptedFulfillmentUri(body.uri);
+      setEncryptedFulfillmentHash(body.payload_hash);
+      setFulfillmentPayloadPublish({ loading: false, error: null, uri: body.uri, hash: body.payload_hash });
+    } catch (error) {
+      setFulfillmentPayloadPublish({
+        loading: false,
+        error: error instanceof Error ? error.message : "Fulfillment payload publish failed",
+        uri: null,
+        hash: null,
+      });
+    }
+  };
+  const hashFulfillmentEvidence = () => setFulfillmentEvidenceHash(hashJsonText(fulfillmentEvidence));
+  const publishFulfillmentEvidence = async () => {
+    setFulfillmentEvidencePublish({ loading: true, error: null, uri: null, hash: null });
+    try {
+      const expectedHash = hashJsonText(fulfillmentEvidence);
+      const response = await fetch(`${API_URL}/fulfillment-evidence`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fulfillment_evidence_json: canonicalizeJsonText(fulfillmentEvidence),
+          expected_hash: expectedHash,
+          receipt_id: receiptId,
+          quote_hash: quoteHash,
+          payload_hash: encryptedFulfillmentHash,
+          evidence_type: "shipment",
+        }),
+      });
+      const body = await response.json() as { uri?: string; evidence_hash?: string; error?: string };
+      if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+      if (!body.uri || !body.evidence_hash) throw new Error("Fulfillment evidence response was missing uri or evidence_hash");
+      setFulfillmentEvidenceHash(body.evidence_hash);
+      setFulfillmentEvidencePublish({ loading: false, error: null, uri: body.uri, hash: body.evidence_hash });
+    } catch (error) {
+      setFulfillmentEvidencePublish({
+        loading: false,
+        error: error instanceof Error ? error.message : "Fulfillment evidence publish failed",
+        uri: null,
+        hash: null,
+      });
+    }
+  };
   const hashCapability = () => setCapabilityHash(hashText(capability));
   const hashAgentCapabilities = () => setAgentCapabilitiesHash(hashText(agentCapabilities));
   const hashResource = () => setResourceHash(hashText(resourceDescriptor));
@@ -1576,6 +1808,16 @@ await merchantWallet.writeContract({
         abi: COMMERCE_WRITE_ABI,
         functionName: "recordReceipt",
         args: [parseBytes32(quoteHash, "quote hash"), hashText(resultDescriptor)],
+      });
+      return sendWalletTransaction(provider, account, CONTRACTS.commerceRegistry, data);
+    });
+  };
+  const sendRecordFulfillment = async () => {
+    await sendTx("fulfillment", async (provider, account) => {
+      const data = encodeFunctionData({
+        abi: COMMERCE_WRITE_ABI,
+        functionName: "recordFulfillment",
+        args: [parsePositiveBigInt(receiptId, "receipt id"), parseBytes32(fulfillmentEvidenceHash, "fulfillment evidence hash")],
       });
       return sendWalletTransaction(provider, account, CONTRACTS.commerceRegistry, data);
     });
@@ -1942,10 +2184,69 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                 <div className="rounded-lg border border-border bg-[#0d1117] p-4">
                   <h3 className="text-sm font-semibold">Encrypted fulfillment payload</h3>
                   <div className="mt-4 grid gap-4">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={generateMerchantEncryptionKey}
+                        className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                      >
+                        Generate merchant key
+                      </button>
+                      <button
+                        type="button"
+                        onClick={encryptFulfillmentPayload}
+                        className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                      >
+                        Encrypt shipping payload
+                      </button>
+                    </div>
+                    <TextArea label="Merchant public key JWK" value={merchantFulfillmentPublicKey} onChange={setMerchantFulfillmentPublicKey} />
+                    <TextArea label="Merchant private key JWK" value={merchantFulfillmentPrivateKey} onChange={setMerchantFulfillmentPrivateKey} />
+                    <Field label="Shipping name" value={shippingName} onChange={setShippingName} />
+                    <Field label="Shipping address line 1" value={shippingLine1} onChange={setShippingLine1} />
+                    <Field label="Shipping address line 2" value={shippingLine2} onChange={setShippingLine2} />
+                    <Field label="Shipping city" value={shippingCity} onChange={setShippingCity} />
+                    <Field label="Shipping region" value={shippingRegion} onChange={setShippingRegion} />
+                    <Field label="Shipping postal code" value={shippingPostalCode} onChange={setShippingPostalCode} />
+                    <Field label="Shipping country" value={shippingCountry} onChange={setShippingCountry} />
+                    <TextArea label="Delivery instructions" value={deliveryInstructions} onChange={setDeliveryInstructions} />
                     <Field label="Encrypted payload URI" value={encryptedFulfillmentUri} onChange={setEncryptedFulfillmentUri} />
                     <Field label="Encrypted payload hash" value={encryptedFulfillmentHash} onChange={setEncryptedFulfillmentHash} />
                     <Field label="Encryption scheme" value={fulfillmentEncryption} onChange={setFulfillmentEncryption} />
                     <Field label="Merchant key ID" value={merchantFulfillmentKey} onChange={setMerchantFulfillmentKey} />
+                    <QuotePublishPanel
+                      title="Publish encrypted fulfillment"
+                      description="Stores the canonical ciphertext envelope. Plaintext shipping data stays in the browser before encryption."
+                      state={fulfillmentPayloadPublish}
+                      onPublish={publishFulfillmentPayload}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+                  <h3 className="text-sm font-semibold">Fulfillment evidence</h3>
+                  <div className="mt-4 grid gap-4">
+                    <Field label="Receipt ID" value={receiptId} onChange={setReceiptId} />
+                    <Field label="Fulfillment status" value={fulfillmentStatus} onChange={setFulfillmentStatus} />
+                    <Field label="Carrier" value={fulfillmentCarrier} onChange={setFulfillmentCarrier} />
+                    <Field label="Tracking number" value={trackingNumber} onChange={setTrackingNumber} />
+                    <TextArea label="Delivery proof descriptor" value={deliveryProofDescriptor} onChange={setDeliveryProofDescriptor} />
+                    <Field label="Fulfillment evidence hash" value={fulfillmentEvidenceHash} onChange={setFulfillmentEvidenceHash} />
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={hashFulfillmentEvidence}
+                        className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                      >
+                        Hash evidence
+                      </button>
+                      <button
+                        type="button"
+                        onClick={publishFulfillmentEvidence}
+                        className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
+                      >
+                        Publish evidence
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <TextArea label="x402 payload" value={x402Payload} onChange={setX402Payload} />
@@ -2000,6 +2301,9 @@ cast send "${CONTRACTS.commerceRegistry}" \\
               <CodePanel title="Agent quote request" value={quoteRequest} />
               <CodePanel title="Merchant quote response" value={quoteResponse} />
               <CodePanel title="Settlement plan JSON" value={settlementPlan} />
+              <CodePanel title="Fulfillment plaintext before encryption" value={fulfillmentPlaintext} />
+              <CodePanel title="Encrypted fulfillment payload" value={encryptedFulfillmentPayload} />
+              <CodePanel title="Fulfillment evidence JSON" value={fulfillmentEvidence} />
               <div className="grid gap-4 lg:grid-cols-2">
                 <QuotePublishPanel
                   title="Publish quote request"
@@ -2031,6 +2335,13 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                   actionLabel="Record receipt"
                   state={txStates.receipt}
                   onSend={sendRecordReceipt}
+                />
+                <TransactionPanel
+                  title="Record fulfillment with wallet"
+                  description="Attaches the canonical fulfillment evidence hash to the receipt. The merchant owner or facilitator can send it."
+                  actionLabel="Record fulfillment"
+                  state={txStates.fulfillment}
+                  onSend={sendRecordFulfillment}
                 />
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -2072,6 +2383,63 @@ function hashText(value: string) {
 
 function hashJsonText(value: string) {
   return hashCanonicalJsonText(value);
+}
+
+async function encryptToMerchantKey(input: {
+  merchantPublicKeyJwk: string;
+  plaintextJson: string;
+  merchantId: string;
+  agent: string;
+  quoteHash: string;
+  merchantKeyId: string;
+}) {
+  const merchantPublicJwk = JSON.parse(input.merchantPublicKeyJwk) as JsonWebKey;
+  const merchantPublicKey = await crypto.subtle.importKey(
+    "jwk",
+    merchantPublicJwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    [],
+  );
+  const ephemeral = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey"],
+  );
+  const aesKey = await crypto.subtle.deriveKey(
+    { name: "ECDH", public: merchantPublicKey },
+    ephemeral.privateKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"],
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encodedPlaintext = new TextEncoder().encode(canonicalizeJsonText(input.plaintextJson));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encodedPlaintext);
+  const ephemeralPublicJwk = await crypto.subtle.exportKey("jwk", ephemeral.publicKey);
+
+  return {
+    schema: "cortex.encrypted-fulfillment.v1",
+    merchant_id: input.merchantId,
+    agent: input.agent,
+    quote_hash: input.quoteHash,
+    encryption: "webcrypto-ecdh-p256-aes-gcm",
+    merchant_key_id: input.merchantKeyId,
+    ephemeral_public_key_jwk: ephemeralPublicJwk,
+    iv: arrayBufferToBase64(iv),
+    ciphertext: arrayBufferToBase64(ciphertext),
+    contains: ["shipping_name", "shipping_address", "delivery_instructions"],
+    plaintext_schema: "cortex.fulfillment-plaintext.v1",
+  };
+}
+
+function arrayBufferToBase64(value: ArrayBuffer | Uint8Array) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
 }
 
 function domainFromUrl(value: string) {

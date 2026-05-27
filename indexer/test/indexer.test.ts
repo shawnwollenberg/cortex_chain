@@ -137,7 +137,7 @@ describe("Indexer integration", () => {
     pool = new pg.Pool({ connectionString: TEST_DB_URL });
 
     // Drop and recreate tables for clean state
-    await pool.query("DROP TABLE IF EXISTS fulfillment_payload_documents, quote_response_documents, quote_request_documents, catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, intents, agents, policies, tx_receipts, pending_intent_metadata, intent_metadata, solvers, attestors, attestations, indexer_state CASCADE");
+    await pool.query("DROP TABLE IF EXISTS fulfillment_evidence_documents, fulfillment_payload_documents, quote_response_documents, quote_request_documents, catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, intents, agents, policies, tx_receipts, pending_intent_metadata, intent_metadata, solvers, attestors, attestations, indexer_state CASCADE");
     await runMigrations(pool);
   }, 30_000);
 
