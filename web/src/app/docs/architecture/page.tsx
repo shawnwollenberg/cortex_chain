@@ -66,7 +66,8 @@ All contract events
         <li><strong>Agent identity and policy</strong> — register an agent, configure spend limits, target/function allowlists, session keys, and signed payment budgets.</li>
         <li><strong>Intent execution</strong> — sign an EIP-712 intent, inspect/select solver bids, and enforce selected solver, amounts, execution commitment, deadline, and optional attestations.</li>
         <li><strong>Merchant discovery</strong> — register merchant, service, facilitator, metadata URI/hash, and service capability hash onchain.</li>
-        <li><strong>Quote commitment</strong> — bind merchant, service, agent, token, amount, payment rail, expiry, nonce, resource hash, terms hash, optional x402 payload hash, and fee terms.</li>
+        <li><strong>Quote commitment</strong> — bind merchant, service, agent, token, amount, payment rail, expiry, nonce, resource hash, settlement-plan terms hash, optional x402 payload hash, and fee terms.</li>
+        <li><strong>Settlement plan</strong> — describe multi-merchant recipients, tax reserves, tips, fees, and escrow lines before payment.</li>
         <li><strong>Receipt, fulfillment, and dispute</strong> — record settlement, result/resource hashes, fulfillment hashes, trust signals, and dispute resolution signals for analytics and reputation.</li>
         <li><strong>Index and query</strong> — index events into Postgres and expose them through REST, MCP, and dashboard views.</li>
       </ol>

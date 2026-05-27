@@ -38,7 +38,9 @@ This project currently targets Base as a protocol layer rather than a new chain.
 - optional x402 payment payload hash
 - protocol fee bps and fee amount
 
-`commitQuote` rejects non-canonical quote hashes. This prevents cross-chain, cross-registry, stale-resource, facilitator-substitution, payment-payload substitution, and fee-term substitution mistakes.
+For multi-merchant, tax, tip, or fee-aware purchases, `terms hash` should be the hash of a canonical `cortex.settlement-plan.v1` document. The settlement plan lists every recipient, amount, line kind, jurisdiction or optionality where relevant, and a line-total check against the quote amount.
+
+`commitQuote` rejects non-canonical quote hashes. This prevents cross-chain, cross-registry, stale-resource, facilitator-substitution, payment-payload substitution, settlement-plan substitution, and fee-term substitution mistakes.
 
 ## Monetization Hooks
 

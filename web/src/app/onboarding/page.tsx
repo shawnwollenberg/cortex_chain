@@ -731,6 +731,14 @@ export default function OnboardingPage() {
   const [paymentNonce, setPaymentNonce] = useState("1");
   const [resourceDescriptor, setResourceDescriptor] = useState("merchant-service-resource-v1");
   const [termsDocument, setTermsDocument] = useState("One company enrichment response for the requested domain.");
+  const [primarySettlementAmount, setPrimarySettlementAmount] = useState("850000");
+  const [partnerSettlementAmount, setPartnerSettlementAmount] = useState("100000");
+  const [partnerSettlementRecipient, setPartnerSettlementRecipient] = useState("0x...");
+  const [taxSettlementAmount, setTaxSettlementAmount] = useState("40000");
+  const [taxSettlementRecipient, setTaxSettlementRecipient] = useState("0x...");
+  const [taxJurisdiction, setTaxJurisdiction] = useState("state-or-county");
+  const [tipSettlementAmount, setTipSettlementAmount] = useState("10000");
+  const [tipSettlementRecipient, setTipSettlementRecipient] = useState("0x...");
   const [x402Payload, setX402Payload] = useState("x402 payment requirement payload");
   const [quoteHash, setQuoteHash] = useState(ZERO_HASH);
   const [resultDescriptor, setResultDescriptor] = useState("merchant fulfilled accepted quote");
@@ -813,6 +821,13 @@ export default function OnboardingPage() {
                 token,
                 amount,
                 target: payout,
+                settlement: {
+                  scheme: "cortex.settlement-plan.v1",
+                  supports_splits: true,
+                  supports_tax_lines: true,
+                  supports_tip_lines: true,
+                  hash_bound_in: "quote.termsHash",
+                },
                 facilitator: {
                   address: facilitator,
                   url: "https://facilitator.example",
@@ -962,6 +977,115 @@ cast send "$POLICY_MODULE_ADDRESS" \\
   --rpc-url "$RPC_URL" \\
   --private-key "$AGENT_KEY"`;
 
+  const settlementPlan = useMemo(
+    () => {
+      const lineTotal = sumDecimalStrings([
+        primarySettlementAmount,
+        partnerSettlementAmount,
+        taxSettlementAmount,
+        tipSettlementAmount,
+      ]);
+
+      return JSON.stringify(
+        {
+          schema: "cortex.settlement-plan.v1",
+          network: "base-sepolia",
+          registry: CONTRACTS.commerceRegistry,
+          quote: {
+            merchant_id: merchantId,
+            service_numeric_id: serviceNumericId,
+            service_id: serviceId,
+            agent: quoteAgent,
+            token,
+            payment_rail: paymentRailName(paymentRail),
+            facilitator,
+            gross_amount: amount,
+          },
+          terms: {
+            summary: termsDocument,
+            terms_uri: termsUri,
+            refund_policy: refundPolicy,
+            dispute_window_seconds: numberOrString(disputeWindowSeconds),
+          },
+          lines: [
+            {
+              kind: "merchant",
+              label: "Primary merchant",
+              merchant_id: merchantId,
+              recipient: payout,
+              token,
+              amount: primarySettlementAmount,
+              basis_points: basisPoints(primarySettlementAmount, amount),
+            },
+            {
+              kind: "supplier",
+              label: "Partner merchant",
+              merchant_id: null,
+              recipient: partnerSettlementRecipient,
+              token,
+              amount: partnerSettlementAmount,
+              basis_points: basisPoints(partnerSettlementAmount, amount),
+            },
+            {
+              kind: "tax",
+              label: "Tax reserve",
+              jurisdiction: taxJurisdiction,
+              authority: "merchant_or_tax_provider",
+              recipient: taxSettlementRecipient,
+              token,
+              amount: taxSettlementAmount,
+              basis_points: basisPoints(taxSettlementAmount, amount),
+            },
+            {
+              kind: "tip",
+              label: "Optional tip",
+              optional: true,
+              recipient: tipSettlementRecipient,
+              token,
+              amount: tipSettlementAmount,
+              basis_points: basisPoints(tipSettlementAmount, amount),
+            },
+          ],
+          verification: {
+            line_total: lineTotal,
+            matches_quote_amount: lineTotal === amount,
+            hash_algorithm: "keccak256(utf8(canonical_settlement_plan_json))",
+          },
+        },
+        null,
+        2,
+      );
+    },
+    [
+      merchantId,
+      serviceNumericId,
+      serviceId,
+      quoteAgent,
+      token,
+      paymentRail,
+      facilitator,
+      amount,
+      termsDocument,
+      termsUri,
+      refundPolicy,
+      disputeWindowSeconds,
+      payout,
+      primarySettlementAmount,
+      partnerSettlementRecipient,
+      partnerSettlementAmount,
+      taxJurisdiction,
+      taxSettlementRecipient,
+      taxSettlementAmount,
+      tipSettlementRecipient,
+      tipSettlementAmount,
+    ],
+  );
+  const settlementLineTotal = useMemo(
+    () => sumDecimalStrings([primarySettlementAmount, partnerSettlementAmount, taxSettlementAmount, tipSettlementAmount]),
+    [primarySettlementAmount, partnerSettlementAmount, taxSettlementAmount, tipSettlementAmount],
+  );
+  const settlementMatchesQuote = settlementLineTotal === amount;
+
   const quotePayload = JSON.stringify(
     {
       merchantId,
@@ -1008,12 +1132,15 @@ cast send "$POLICY_MODULE_ADDRESS" \\
         {
           request_id: quoteRequestId,
           quote: JSON.parse(quotePayload) as unknown,
-          terms_document: termsDocument,
+          terms_hash_input: "settlement_plan",
+          settlement_plan: JSON.parse(settlementPlan) as unknown,
           payment_requirement: paymentRail === "3" ? safeJson(x402Payload) : null,
           agent_checks: [
             "fetch service catalog and verify metadata hash",
             "verify merchant/service active status",
             "verify quote hash from CommerceRegistry.computeQuoteHash",
+            "verify settlement plan hash equals the quote termsHash",
+            "verify settlement line total equals quoted amount",
             "verify account policy before payment",
             "verify x402 payload hash when paymentRail is 3",
           ],
@@ -1021,7 +1148,7 @@ cast send "$POLICY_MODULE_ADDRESS" \\
         null,
         2,
       ),
-    [quoteRequestId, quotePayload, termsDocument, paymentRail, x402Payload],
+    [quoteRequestId, quotePayload, settlementPlan, paymentRail, x402Payload],
   );
 
   const quoteExchangeSummary = JSON.stringify(
@@ -1189,7 +1316,7 @@ await merchantWallet.writeContract({
   const hashCapability = () => setCapabilityHash(hashText(capability));
   const hashAgentCapabilities = () => setAgentCapabilitiesHash(hashText(agentCapabilities));
   const hashResource = () => setResourceHash(hashText(resourceDescriptor));
-  const hashTerms = () => setTermsHash(hashText(termsDocument));
+  const hashTerms = () => setTermsHash(hashText(settlementPlan));
   const hashX402Payload = () => setX402PayloadHash(hashText(x402Payload));
   const runWalletChecks = async () => {
     setWalletCheck((current) => ({ ...current, loading: true, error: null }));
@@ -1721,6 +1848,25 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                 <TextArea label="Quote request input" value={quoteRequestInput} onChange={setQuoteRequestInput} />
                 <TextArea label="Resource descriptor" value={resourceDescriptor} onChange={setResourceDescriptor} />
                 <TextArea label="Terms document" value={termsDocument} onChange={setTermsDocument} />
+                <div className="rounded-lg border border-border bg-[#0d1117] p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="text-sm font-semibold">Settlement lines</h3>
+                    <StatusPill
+                      ok={settlementMatchesQuote}
+                      label={settlementMatchesQuote ? "Line total matches quote" : `Line total ${settlementLineTotal}`}
+                    />
+                  </div>
+                  <div className="mt-4 grid gap-4">
+                    <Field label="Primary merchant amount" value={primarySettlementAmount} onChange={setPrimarySettlementAmount} />
+                    <Field label="Partner merchant recipient" value={partnerSettlementRecipient} onChange={setPartnerSettlementRecipient} />
+                    <Field label="Partner merchant amount" value={partnerSettlementAmount} onChange={setPartnerSettlementAmount} />
+                    <Field label="Tax reserve recipient" value={taxSettlementRecipient} onChange={setTaxSettlementRecipient} />
+                    <Field label="Tax amount" value={taxSettlementAmount} onChange={setTaxSettlementAmount} />
+                    <Field label="Tax jurisdiction" value={taxJurisdiction} onChange={setTaxJurisdiction} />
+                    <Field label="Tip recipient" value={tipSettlementRecipient} onChange={setTipSettlementRecipient} />
+                    <Field label="Tip amount" value={tipSettlementAmount} onChange={setTipSettlementAmount} />
+                  </div>
+                </div>
                 <TextArea label="x402 payload" value={x402Payload} onChange={setX402Payload} />
                 <TextArea label="Receipt result descriptor" value={resultDescriptor} onChange={setResultDescriptor} />
                 <Field label="Resource hash" value={resourceHash} onChange={setResourceHash} />
@@ -1739,7 +1885,7 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                     onClick={hashTerms}
                     className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
                   >
-                    Hash quote terms
+                    Hash settlement terms
                   </button>
                   <button
                     type="button"
@@ -1758,6 +1904,8 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                       "Merchant and service are active in Cortex.",
                       "Metadata hashes match the offchain merchant and service documents.",
                       "Payment rail and facilitator match the actual payment requirement.",
+                      "Settlement plan hash equals termsHash and line total equals the quote amount.",
+                      "Tax recipients are verified remittance or reserve wallets for the merchant's jurisdiction.",
                       "The account policy allows this merchant, token, facilitator, target, amount, and daily total.",
                       "For x402, the normalized payment payload hash equals the quote x402 payload hash.",
                       "The quote has not expired and the nonce has not been reused.",
@@ -1769,6 +1917,7 @@ cast send "${CONTRACTS.commerceRegistry}" \\
             <div className="grid gap-4">
               <CodePanel title="Agent quote request" value={quoteRequest} />
               <CodePanel title="Merchant quote response" value={quoteResponse} />
+              <CodePanel title="Settlement plan JSON" value={settlementPlan} />
               <div className="grid gap-4 lg:grid-cols-2">
                 <QuotePublishPanel
                   title="Publish quote request"
@@ -1865,6 +2014,25 @@ function paymentRailName(value: string) {
 function numberOrString(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : value;
+}
+
+function sumDecimalStrings(values: string[]) {
+  try {
+    return values.reduce((total, value) => total + parseUint(value || "0", "settlement amount"), BigInt(0)).toString();
+  } catch {
+    return "invalid";
+  }
+}
+
+function basisPoints(amount: string, total: string) {
+  try {
+    const numerator = parseUint(amount || "0", "settlement amount") * BigInt(10000);
+    const denominator = parseUint(total || "0", "quote amount");
+    if (denominator === BigInt(0)) return 0;
+    return Number(numerator / denominator);
+  } catch {
+    return null;
+  }
 }
 
 function getEthereumProvider(): EthereumProvider | null {

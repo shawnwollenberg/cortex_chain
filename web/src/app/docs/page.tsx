@@ -26,6 +26,11 @@ const SECTIONS = [
     description: "TypeScript flows for discovery, quotes, payments, receipts, disputes, and reputation.",
   },
   {
+    title: "Settlement Plans",
+    href: "/docs/settlement-plans",
+    description: "Quote-bound multi-merchant splits, tax reserves, tips, fees, and agent validation rules.",
+  },
+  {
     title: "Product Onboarding",
     href: "/onboarding",
     description: "Guided workspace for merchant profiles, service catalogs, agent policy, and quote acceptance.",

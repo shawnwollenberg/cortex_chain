@@ -208,6 +208,32 @@ The policy key is `(account, merchant, token, facilitator)`. For x402, the facil
 
 The merchant commits quote terms before the agent pays. The quote binds merchant, service, agent, token, facilitator, payment rail, amount, expiry, nonce, resource hash, terms hash, optional x402 payload hash, and protocol fee terms.
 
+For multi-merchant, tax, tip, or fee-aware quotes, `termsHash` should hash a `cortex.settlement-plan.v1` JSON document. That settlement plan names every recipient and amount, then confirms the line total equals the quote amount.
+
+```ts
+const settlementPlan = {
+  schema: "cortex.settlement-plan.v1",
+  quote: {
+    merchant_id: "1",
+    service_numeric_id: "1",
+    token: USDC_ADDRESS,
+    gross_amount: "1000000",
+  },
+  lines: [
+    { kind: "merchant", recipient: merchantPayoutAddress, amount: "850000" },
+    { kind: "supplier", recipient: partnerMerchantAddress, amount: "100000" },
+    { kind: "tax", jurisdiction: "state-or-county", recipient: taxReserveAddress, amount: "40000" },
+    { kind: "tip", optional: true, recipient: tipRecipientAddress, amount: "10000" },
+  ],
+  verification: {
+    line_total: "1000000",
+    matches_quote_amount: true,
+  },
+};
+
+const termsHash = keccak256(toBytes(JSON.stringify(settlementPlan, null, 2)));
+```
+
 Payment rails:
 
 | Value | Rail |

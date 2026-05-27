@@ -65,11 +65,12 @@ Indexer -> Postgres -> REST API / MCP / Dashboard
 2. Service metadata points to a machine-readable catalog with capabilities, payment rails, input/output schemas, SLA, refund, privacy, and attestation requirements.
 3. Agent checks service state and account policy before accepting terms.
 4. Merchant commits a quote binding merchant, service, agent, token, facilitator/payment rail, amount, expiry, payment nonce, resource hash, terms hash, optional x402 payload hash, and protocol fee terms.
-5. Payment can happen through wallet-to-wallet transfer, ERC-20 transfer, swap, facilitator-mediated settlement, or x402.
-6. Receipt records settlement, payment rail, result/resource hashes, and optional fulfillment hash.
-7. Merchants or facilitators can add fulfillment attestations to receipts.
-8. Any participant can record verification, risk, compliance, or fulfillment trust signals for merchants, services, facilitators, and agents.
-9. Disputes can be opened and resolved against receipts, creating reputation and risk signals for both agents and merchants.
+5. For multi-merchant, tax, tip, or fee-aware purchases, `termsHash` should bind a canonical `cortex.settlement-plan.v1` document that names each recipient and verifies the line total equals the quote amount.
+6. Payment can happen through wallet-to-wallet transfer, ERC-20 transfer, swap, facilitator-mediated settlement, or x402.
+7. Receipt records settlement, payment rail, result/resource hashes, and optional fulfillment hash.
+8. Merchants or facilitators can add fulfillment attestations to receipts.
+9. Any participant can record verification, risk, compliance, or fulfillment trust signals for merchants, services, facilitators, and agents.
+10. Disputes can be opened and resolved against receipts, creating reputation and risk signals for both agents and merchants.
 
 ## Payment Rails
 

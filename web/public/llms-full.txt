@@ -38,6 +38,7 @@ This starts Anvil (local EVM), deploys contracts, launches the indexer/solver/AP
 - [Local Development](/docs/local-dev.md) — Step-by-step local dev guide
 - [Testnet Deployment](/docs/testnet-deploy.md) — Current Base Sepolia and AWS deployment guide
 - [SDK Examples](/docs/sdk-examples.md) — TypeScript flows for merchant discovery, quote commitments, payments, x402 policy, receipts, disputes, analytics, and reputation
+- [Settlement Plans](/docs/settlement-plans.md) — Quote-bound multi-merchant splits, tax reserves, tips, fees, and agent validation rules
 - [Product Onboarding](/docs/product-onboarding.md) — Guided onboarding workspace for merchant profiles, service catalogs, agent policy, and quote acceptance
 - [Value Proposition and Use Cases](/docs/value-prop-use-cases.md) — Strategic positioning, customer segments, use cases, wedges, product gaps, and messaging
 - [MCP Server](/docs/mcp.md) — Model Context Protocol tools for AI agents
@@ -2198,3 +2199,45 @@ Security analysis for Cortex as a Base-native agentic commerce protocol. This do
 - **Forge fmt** ensures consistent formatting.
 - Fuzz tests run 1,000 iterations per property.
 - Invariant tests run 256 sequences of 64 calls each.
+
+
+---
+
+# Settlement Plans
+
+Cortex quote commitments can bind a payment to a canonical settlement plan. The plan is JSON that describes who gets paid, how much each party gets, which wallet receives tax or tip reserves, and which terms the agent accepted.
+
+The current Base Sepolia contracts do not split funds themselves. Instead, the merchant quote response includes a `cortex.settlement-plan.v1` document, and `CommerceRegistry.commitQuote` binds `termsHash` to `keccak256(utf8(settlementPlanJson))`. Agents verify that hash before paying, then receipts and fulfillment evidence can reference the resulting payment execution.
+
+## Why This Matters
+
+Agentic commerce will not always be one buyer paying one merchant. A single quote may need to cover:
+
+- A primary merchant.
+- One or more partner merchants or suppliers.
+- Sales tax, VAT, or other reserve lines.
+- Optional tips.
+- Platform, facilitator, protocol, escrow, or fulfillment fees.
+
+Putting those terms into the quote gives agents a deterministic thing to verify before payment and gives merchants a shared reconciliation record after settlement.
+
+## Line Kinds
+
+- `merchant`: The primary merchant payout.
+- `supplier`: A partner merchant, manufacturer, service provider, or affiliate.
+- `tax`: A tax reserve or remittance wallet.
+- `tip`: Optional tip or gratuity.
+- `platform_fee`: Marketplace or SaaS platform fee.
+- `facilitator_fee`: Payment facilitator fee.
+- `protocol_fee`: Future Cortex protocol fee if one is enabled.
+- `escrow`: Funds held until fulfillment, delivery, or dispute resolution.
+
+Tax wallets need special care. Cortex should not assume that an IRS, state, county, or city wallet exists. Today, a tax line should point to a merchant-controlled reserve wallet, a verified tax provider, or a verified government wallet only when that wallet has been independently validated.
+
+## Agent Validation
+
+Before paying, an agent should fetch the merchant quote response, extract the `settlement_plan`, recompute the plan hash over the exact canonical JSON bytes, confirm that hash equals the quote `termsHash`, confirm `line_total` equals `quote.amount`, confirm every recipient is acceptable under account policy, validate tax/tip/partner/fee lines, and confirm `x402PayloadHash` when the payment rail is x402.
+
+## Settlement Execution
+
+The first implementation treats settlement plans as quote-bound instructions. Actual payment movement can happen through direct native or ERC-20 transfer, swap then transfer, facilitator-mediated settlement, x402 payment acceptance, merchant-side split payout after receipt, or a future split/escrow settlement adapter.
