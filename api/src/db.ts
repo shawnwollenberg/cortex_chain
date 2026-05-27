@@ -19,7 +19,7 @@ export async function runMigrations(pool: pg.Pool): Promise<void> {
 
   for (const migrationDir of migrationDirs) {
     if (existsSync(resolve(migrationDir, "001_init.sql"))) {
-      for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql", "011_quote_documents.sql"]) {
+      for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql", "011_quote_documents.sql", "012_fulfillment_payloads.sql"]) {
         const migrationPath = resolve(migrationDir, file);
         if (existsSync(migrationPath)) {
           const sql = readFileSync(migrationPath, "utf-8");

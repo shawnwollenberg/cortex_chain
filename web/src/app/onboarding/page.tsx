@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { decodeFunctionResult, encodeFunctionData, isAddress, keccak256, toBytes } from "viem";
 import { useMemo, useState } from "react";
+import { canonicalizeJsonText, hashCanonicalJsonText } from "@/lib/canonical-json";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://api.cortex.wallyweb.com").replace(/\/$/, "");
 const BASE_SEPOLIA_CHAIN_ID = 84532;
@@ -1090,7 +1091,7 @@ cast send "$POLICY_MODULE_ADDRESS" \\
           verification: {
             line_total: lineTotal,
             matches_quote_amount: lineTotal === amount,
-            hash_algorithm: "keccak256(utf8(canonical_settlement_plan_json))",
+            hash_algorithm: "keccak256(utf8(canonical-json))",
           },
         },
         null,
@@ -1223,7 +1224,7 @@ cast send "$POLICY_MODULE_ADDRESS" \\
       quote_response_uri: quoteResponsePublish.uri,
       quote_response_hash: quoteResponsePublish.hash,
       verification: [
-        "fetch each URI and recompute keccak256 over the exact response text",
+        "fetch each URI and recompute keccak256 over the canonical JSON response text",
         "verify merchant and service state before payment",
         "verify quote payload hashes before commit/payment",
       ],
@@ -1273,10 +1274,10 @@ await merchantWallet.writeContract({
   const setTxState = (key: TxKey, patch: Partial<TxState>) => {
     setTxStates((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
   };
-  const hashMerchantMetadata = () => setMerchantHash(hashText(merchantMetadata));
-  const hashServiceMetadata = () => setServiceHash(hashText(serviceMetadata));
+  const hashMerchantMetadata = () => setMerchantHash(hashJsonText(merchantMetadata));
+  const hashServiceMetadata = () => setServiceHash(hashJsonText(serviceMetadata));
   const hashCatalog = () => {
-    const hash = hashText(serviceCatalog);
+    const hash = hashJsonText(serviceCatalog);
     setCatalogHash(hash);
     setServiceHash(hash);
     setServiceUri(catalogUri);
@@ -1284,12 +1285,12 @@ await merchantWallet.writeContract({
   const publishCatalog = async () => {
     setCatalogPublish({ loading: true, error: null, uri: null, hash: null });
     try {
-      const expectedHash = hashText(serviceCatalog);
+      const expectedHash = hashJsonText(serviceCatalog);
       const response = await fetch(`${API_URL}/catalogs`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          catalog_json: serviceCatalog,
+          catalog_json: canonicalizeJsonText(serviceCatalog),
           expected_hash: expectedHash,
           merchant_id: merchantId,
           service_id: serviceId,
@@ -1321,12 +1322,12 @@ await merchantWallet.writeContract({
   const publishQuoteRequest = async () => {
     setQuoteRequestPublish({ loading: true, error: null, uri: null, hash: null });
     try {
-      const expectedHash = hashText(quoteRequest);
+      const expectedHash = hashJsonText(quoteRequest);
       const response = await fetch(`${API_URL}/quote-requests`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          quote_request_json: quoteRequest,
+          quote_request_json: canonicalizeJsonText(quoteRequest),
           expected_hash: expectedHash,
           request_id: quoteRequestId,
           merchant_id: merchantId,
@@ -1351,12 +1352,12 @@ await merchantWallet.writeContract({
   const publishQuoteResponse = async () => {
     setQuoteResponsePublish({ loading: true, error: null, uri: null, hash: null });
     try {
-      const expectedHash = hashText(quoteResponse);
+      const expectedHash = hashJsonText(quoteResponse);
       const response = await fetch(`${API_URL}/quote-responses`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          quote_response_json: quoteResponse,
+          quote_response_json: canonicalizeJsonText(quoteResponse),
           expected_hash: expectedHash,
           request_hash: quoteRequestPublish.hash,
           request_id: quoteRequestId,
@@ -1381,7 +1382,7 @@ await merchantWallet.writeContract({
   const hashCapability = () => setCapabilityHash(hashText(capability));
   const hashAgentCapabilities = () => setAgentCapabilitiesHash(hashText(agentCapabilities));
   const hashResource = () => setResourceHash(hashText(resourceDescriptor));
-  const hashTerms = () => setTermsHash(hashText(settlementPlan));
+  const hashTerms = () => setTermsHash(hashJsonText(settlementPlan));
   const hashX402Payload = () => setX402PayloadHash(hashText(x402Payload));
   const runWalletChecks = async () => {
     setWalletCheck((current) => ({ ...current, loading: true, error: null }));
@@ -2002,13 +2003,13 @@ cast send "${CONTRACTS.commerceRegistry}" \\
               <div className="grid gap-4 lg:grid-cols-2">
                 <QuotePublishPanel
                   title="Publish quote request"
-                  description="Stores the exact agent request JSON and returns a stable URL for the merchant."
+                  description="Stores canonical agent request JSON and returns a stable URL for the merchant."
                   state={quoteRequestPublish}
                   onPublish={publishQuoteRequest}
                 />
                 <QuotePublishPanel
                   title="Publish quote response"
-                  description="Stores the exact merchant response JSON and returns a stable URL for the agent."
+                  description="Stores canonical merchant response JSON and returns a stable URL for the agent."
                   state={quoteResponsePublish}
                   onPublish={publishQuoteResponse}
                 />
@@ -2067,6 +2068,10 @@ function safeJson(value: string) {
 
 function hashText(value: string) {
   return keccak256(toBytes(value));
+}
+
+function hashJsonText(value: string) {
+  return hashCanonicalJsonText(value);
 }
 
 function domainFromUrl(value: string) {

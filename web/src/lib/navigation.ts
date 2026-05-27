@@ -18,6 +18,7 @@ export const docsNav: NavGroup[] = [
       { title: "Examples", href: "/docs/examples" },
       { title: "SDK Examples", href: "/docs/sdk-examples" },
       { title: "Settlement Plans", href: "/docs/settlement-plans" },
+      { title: "Settlement Adapter", href: "/docs/settlement-adapter" },
       { title: "Value Prop", href: "/docs/value-prop-use-cases" },
     ],
   },

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request } from "express";
 import type pg from "pg";
-import { keccak256, toBytes } from "viem";
+import { parseCanonicalJsonDocument } from "../canonical-json.js";
 import { isValidAddress, isValidId } from "../utils.js";
 
 const MAX_QUOTE_DOCUMENT_BYTES = 128 * 1024;
@@ -23,16 +23,6 @@ function readOptionalId(value: unknown, label: string): string | null {
   return id;
 }
 
-function parseJsonDocument(value: unknown, field: string): { text: string; sizeBytes: number; parsed: Record<string, unknown> } {
-  const text = typeof value === "string" ? value : "";
-  if (!text) throw new Error(`${field} is required`);
-  const sizeBytes = Buffer.byteLength(text, "utf8");
-  if (sizeBytes > MAX_QUOTE_DOCUMENT_BYTES) throw new Error(`${field} exceeds ${MAX_QUOTE_DOCUMENT_BYTES} bytes`);
-  const parsed = JSON.parse(text) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${field} must be a JSON object`);
-  return { text, sizeBytes, parsed: parsed as Record<string, unknown> };
-}
-
 function stringField(value: unknown, maxLength: number): string {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
@@ -45,7 +35,7 @@ export function createQuotesRouter(pool: pg.Pool): Router {
     try {
       let document;
       try {
-        document = parseJsonDocument(req.body?.quote_request_json, "quote_request_json");
+        document = parseCanonicalJsonDocument(req.body?.quote_request_json, "quote_request_json", MAX_QUOTE_DOCUMENT_BYTES);
       } catch (error) {
         res.status(error instanceof SyntaxError ? 400 : 400).json({ error: error instanceof Error ? error.message : "Invalid quote_request_json" });
         return;
@@ -75,7 +65,7 @@ export function createQuotesRouter(pool: pg.Pool): Router {
         return;
       }
 
-      const requestHash = keccak256(toBytes(document.text)).toLowerCase();
+      const requestHash = document.hash;
       if (expectedHash && expectedHash !== requestHash) {
         res.status(409).json({ error: "expected_hash does not match quote_request_json", request_hash: requestHash });
         return;
@@ -101,6 +91,7 @@ export function createQuotesRouter(pool: pg.Pool): Router {
       res.status(201).json({
         ...result.rows[0],
         uri: `${publicBaseUrl(req)}/quote-requests/${requestHash}`,
+        canonical_json: document.text,
       });
     } catch (err) {
       next(err);
@@ -152,7 +143,7 @@ export function createQuotesRouter(pool: pg.Pool): Router {
     try {
       let document;
       try {
-        document = parseJsonDocument(req.body?.quote_response_json, "quote_response_json");
+        document = parseCanonicalJsonDocument(req.body?.quote_response_json, "quote_response_json", MAX_QUOTE_DOCUMENT_BYTES);
       } catch (error) {
         res.status(400).json({ error: error instanceof Error ? error.message : "Invalid quote_response_json" });
         return;
@@ -197,7 +188,7 @@ export function createQuotesRouter(pool: pg.Pool): Router {
         return;
       }
 
-      const responseHash = keccak256(toBytes(document.text)).toLowerCase();
+      const responseHash = document.hash;
       if (expectedHash && expectedHash !== responseHash) {
         res.status(409).json({ error: "expected_hash does not match quote_response_json", response_hash: responseHash });
         return;
@@ -224,6 +215,7 @@ export function createQuotesRouter(pool: pg.Pool): Router {
       res.status(201).json({
         ...result.rows[0],
         uri: `${publicBaseUrl(req)}/quote-responses/${responseHash}`,
+        canonical_json: document.text,
       });
     } catch (err) {
       next(err);

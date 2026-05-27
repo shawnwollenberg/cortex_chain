@@ -9,7 +9,7 @@ Open:
 
 The page does not request private keys, signatures, or transaction submission. It can connect to an injected wallet for read-only checks and Base Sepolia network switching, then generates metadata JSON, registration command templates, policy setup templates, and quote acceptance checklists that can be copied into a local wallet/script workflow.
 
-Generated hashes use `keccak256` through `viem`, matching the convention used in Cortex contract tests and examples.
+Generated JSON document hashes use canonical JSON plus `keccak256` through `viem`, matching the hosted API convention for catalogs, quote requests, quote responses, settlement plans, and fulfillment payload envelopes.
 
 The read-only preflight panel can connect to an injected wallet to check the selected account, chain ID, deployed contract bytecode, and hosted API health. It can also ask the wallet to switch or add Base Sepolia. It does not request signatures or submit transactions.
 
@@ -41,9 +41,9 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 3. **Publish catalog**
    - Generate a schema-compatible merchant/service catalog JSON document.
    - Include service endpoint, method, payment rail, token, amount, facilitator, schemas, SLA, refund, and privacy metadata.
-   - Generate a catalog hash with `keccak256`.
-   - Download the exact JSON file to publish to IPFS, Arweave, S3, or HTTPS.
-   - Or publish the exact JSON to the hosted Cortex API, which stores it by `keccak256` hash and returns `https://api.cortex.wallyweb.com/catalogs/:hash`.
+   - Generate a canonical catalog hash with `keccak256`.
+   - Download the JSON file to publish to IPFS, Arweave, S3, or HTTPS.
+   - Or publish the JSON to the hosted Cortex API, which canonicalizes it, stores it by `keccak256` hash, and returns `https://api.cortex.wallyweb.com/catalogs/:hash`.
    - Use the catalog URI and hash as the service metadata URI/hash for `registerService`.
 
 4. **Agent policy**
@@ -69,7 +69,7 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 
 ## Product Constraints
 
-- Hashes are generated from the current text shown in the browser. If a merchant later publishes different metadata bytes at the same URI, agents should reject the mismatch.
+- JSON hashes are generated from canonicalized document bytes. If a merchant later publishes different canonical bytes at the same URI, agents should reject the mismatch.
 - The page is safe for public hosting because it never handles private keys.
 - Rich metadata stays offchain; Cortex anchors the URI and hash onchain.
 - Catalog JSON follows `docs/service-catalog.schema.json` closely enough for onboarding and examples. Production catalogs should be validated against that schema in CI or publishing tooling.
@@ -77,6 +77,6 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 
 ## Next Product Improvements
 
-- Add stronger canonical JSON rules for teams that need byte-for-byte reproducibility across tools.
+- Add client-side encryption and publishing for fulfillment payloads.
 - Expand SDK examples into runnable sample scripts for transfer, swap, facilitator, and x402 payments.
 - Add guided post-transaction verification against the hosted API.

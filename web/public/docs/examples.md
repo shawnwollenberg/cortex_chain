@@ -240,7 +240,18 @@ const settlementPlan = {
   },
 };
 
-const termsHash = keccak256(toBytes(JSON.stringify(settlementPlan, null, 2)));
+const canonicalizeJson = (value: unknown): string => JSON.stringify(sortJson(value));
+const sortJson = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, sortJson(child)]),
+  );
+};
+
+const termsHash = keccak256(toBytes(canonicalizeJson(settlementPlan)));
 ```
 
 For physical goods, the shipping address belongs in the encrypted fulfillment payload, not in public metadata or onchain calldata. The merchant publishes a fulfillment encryption key in merchant metadata, the agent encrypts the buyer address to that key, and the quote binds only the encrypted payload URI/hash.

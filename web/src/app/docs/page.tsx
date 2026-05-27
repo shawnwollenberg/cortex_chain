@@ -31,6 +31,11 @@ const SECTIONS = [
     description: "Quote-bound multi-merchant splits, tax reserves, tips, fees, and agent validation rules.",
   },
   {
+    title: "Settlement Adapter",
+    href: "/docs/settlement-adapter",
+    description: "Design for direct native and ERC-20 split payout execution from quote-bound settlement plans.",
+  },
+  {
     title: "Product Onboarding",
     href: "/onboarding",
     description: "Guided workspace for merchant profiles, service catalogs, agent policy, and quote acceptance.",

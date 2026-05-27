@@ -29,8 +29,8 @@ export default function ApiPage() {
       <h3 className="text-lg font-semibold mb-2">Publish Catalog JSON</h3>
       <p className="text-sm text-muted mb-2"><code>POST /catalogs</code></p>
       <p className="text-sm text-muted mb-2">
-        Stores the exact catalog JSON bytes by <code>keccak256</code> hash. Use the returned
-        <code> uri</code> and <code>catalog_hash</code> as the service metadata URI/hash.
+        Canonicalizes catalog JSON and stores the canonical bytes by <code>keccak256</code> hash.
+        Use the returned <code> uri</code> and <code>catalog_hash</code> as the service metadata URI/hash.
       </p>
       <CodeBlock language="json">{`{
   "catalog_json": "{\\n  \\"merchant\\": {...},\\n  \\"services\\": [...]\\n}",
@@ -43,13 +43,14 @@ export default function ApiPage() {
   "merchant_id": "1",
   "service_id": "enrich-company-v1",
   "size_bytes": 2048,
-  "uri": "https://api.cortex.wallyweb.com/catalogs/0x..."
+  "uri": "https://api.cortex.wallyweb.com/catalogs/0x...",
+  "canonical_json": "{\\"merchant\\":{},\\"services\\":[]}"
 }`}</CodeBlock>
 
       <h3 className="text-lg font-semibold mb-2">Fetch Catalog JSON</h3>
       <p className="text-sm text-muted mb-2"><code>GET /catalogs/:hash</code></p>
       <p className="text-sm text-muted mb-6">
-        Returns the original JSON text as <code>application/json</code>. Metadata is available at
+        Returns canonical JSON text as <code>application/json</code>. Metadata is available at
         <code> GET /catalogs/:hash/metadata</code>.
       </p>
 
@@ -61,7 +62,7 @@ export default function ApiPage() {
       <h3 className="text-lg font-semibold mb-2">Publish Quote Request</h3>
       <p className="text-sm text-muted mb-2"><code>POST /quote-requests</code></p>
       <p className="text-sm text-muted mb-2">
-        Stores the exact agent quote request JSON by <code>keccak256</code> hash and returns a stable URI.
+        Canonicalizes the agent quote request JSON by <code>keccak256</code> hash and returns a stable URI.
       </p>
       <CodeBlock language="json">{`{
   "quote_request_json": "{\\n  \\"request_id\\": \\"req-001\\"\\n}",
@@ -76,7 +77,7 @@ export default function ApiPage() {
       <h3 className="text-lg font-semibold mb-2">Publish Quote Response</h3>
       <p className="text-sm text-muted mb-2"><code>POST /quote-responses</code></p>
       <p className="text-sm text-muted mb-2">
-        Stores the exact merchant quote response JSON and can link it to a hosted quote request hash.
+        Canonicalizes the merchant quote response JSON and can link it to a hosted quote request hash.
       </p>
       <CodeBlock language="json">{`{
   "quote_response_json": "{\\n  \\"request_id\\": \\"req-001\\",\\n  \\"quote\\": {...}\\n}",
@@ -88,8 +89,28 @@ export default function ApiPage() {
   "agent": "0x..."
 }`}</CodeBlock>
       <p className="text-sm text-muted mb-6">
-        Fetch original JSON at <code>GET /quote-requests/:hash</code> and <code>GET /quote-responses/:hash</code>.
+        Fetch canonical JSON at <code>GET /quote-requests/:hash</code> and <code>GET /quote-responses/:hash</code>.
         Metadata is available at each route&apos;s <code>/metadata</code> path.
+      </p>
+
+      <h3 className="text-lg font-semibold mb-2">Publish Encrypted Fulfillment Payload</h3>
+      <p className="text-sm text-muted mb-2"><code>POST /fulfillment-payloads</code></p>
+      <p className="text-sm text-muted mb-2">
+        Stores canonical encrypted fulfillment payload envelopes by hash. Payloads should contain
+        ciphertext and encryption metadata, not plaintext shipping data.
+      </p>
+      <CodeBlock language="json">{`{
+  "fulfillment_payload_json": "{\\n  \\"schema\\": \\"cortex.encrypted-fulfillment.v1\\",\\n  \\"ciphertext\\": \\"base64:...\\"\\n}",
+  "expected_hash": "0x...",
+  "merchant_id": "1",
+  "agent": "0x...",
+  "quote_hash": "0x...",
+  "encryption": "x25519-xsalsa20-poly1305",
+  "merchant_key_id": "did:key:z6MkMerchantFulfillmentKey"
+}`}</CodeBlock>
+      <p className="text-sm text-muted mb-6">
+        Fetch canonical envelope JSON at <code>GET /fulfillment-payloads/:hash</code>. Metadata is
+        available at <code>GET /fulfillment-payloads/:hash/metadata</code>.
       </p>
 
       <hr className="border-border my-8" />

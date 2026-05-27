@@ -30,7 +30,7 @@ Response:
 POST /catalogs
 ```
 
-Stores the exact catalog JSON bytes by `keccak256` hash. Use the returned `uri` and `catalog_hash` as the service metadata URI/hash when registering a service.
+Canonicalizes catalog JSON, stores the canonical bytes by `keccak256` hash, and returns the canonical URI/hash to use as the service metadata URI/hash when registering a service.
 
 Request:
 ```json
@@ -42,7 +42,7 @@ Request:
 }
 ```
 
-`expected_hash`, `merchant_id`, and `service_id` are optional. If `expected_hash` is provided, the API rejects mismatches.
+`expected_hash`, `merchant_id`, and `service_id` are optional. If `expected_hash` is provided, the API rejects mismatches. `expected_hash` must be computed over canonical JSON bytes, not pretty-printed input.
 
 Response `201`:
 ```json
@@ -51,7 +51,8 @@ Response `201`:
   "merchant_id": "1",
   "service_id": "enrich-company-v1",
   "size_bytes": 2048,
-  "uri": "https://api.cortex.wallyweb.com/catalogs/0x..."
+  "uri": "https://api.cortex.wallyweb.com/catalogs/0x...",
+  "canonical_json": "{\"merchant\":{},\"services\":[]}"
 }
 ```
 
@@ -61,7 +62,7 @@ Response `201`:
 GET /catalogs/:hash
 ```
 
-Returns the original JSON text as `application/json`.
+Returns the canonical JSON text as `application/json`.
 
 #### Fetch Catalog Metadata
 
@@ -81,7 +82,7 @@ Returns hash, merchant id, service id, byte size, timestamps, and URI.
 POST /quote-requests
 ```
 
-Stores the exact agent quote request JSON by `keccak256` hash and returns a stable URI for merchant retrieval.
+Canonicalizes the agent quote request JSON, stores the canonical bytes by `keccak256` hash, and returns a stable URI for merchant retrieval.
 
 Request:
 ```json
@@ -106,11 +107,12 @@ Response `201`:
   "service_id": "enrich-company-v1",
   "agent": "0x...",
   "size_bytes": 1024,
-  "uri": "https://api.cortex.wallyweb.com/quote-requests/0x..."
+  "uri": "https://api.cortex.wallyweb.com/quote-requests/0x...",
+  "canonical_json": "{\"merchant_id\":\"1\",\"request_id\":\"req-001\"}"
 }
 ```
 
-Fetch the original JSON at `GET /quote-requests/:hash`. Metadata is available at `GET /quote-requests/:hash/metadata`.
+Fetch canonical JSON at `GET /quote-requests/:hash`. Metadata is available at `GET /quote-requests/:hash/metadata`.
 
 #### Publish Quote Response
 
@@ -118,7 +120,7 @@ Fetch the original JSON at `GET /quote-requests/:hash`. Metadata is available at
 POST /quote-responses
 ```
 
-Stores the exact merchant quote response JSON by `keccak256` hash and can link it to a hosted quote request hash.
+Canonicalizes the merchant quote response JSON, stores the canonical bytes by `keccak256` hash, and can link it to a hosted quote request hash.
 
 Request:
 ```json
@@ -143,11 +145,50 @@ Response `201`:
   "service_numeric_id": "1",
   "agent": "0x...",
   "size_bytes": 1024,
-  "uri": "https://api.cortex.wallyweb.com/quote-responses/0x..."
+  "uri": "https://api.cortex.wallyweb.com/quote-responses/0x...",
+  "canonical_json": "{\"quote\":{},\"request_id\":\"req-001\"}"
 }
 ```
 
-Fetch the original JSON at `GET /quote-responses/:hash`. Metadata is available at `GET /quote-responses/:hash/metadata`.
+Fetch canonical JSON at `GET /quote-responses/:hash`. Metadata is available at `GET /quote-responses/:hash/metadata`.
+
+#### Publish Encrypted Fulfillment Payload
+
+```
+POST /fulfillment-payloads
+```
+
+Canonicalizes an encrypted fulfillment payload envelope and stores it by `keccak256` hash. The payload should contain ciphertext and encryption metadata, not plaintext shipping data.
+
+Request:
+```json
+{
+  "fulfillment_payload_json": "{\n  \"schema\": \"cortex.encrypted-fulfillment.v1\",\n  \"ciphertext\": \"base64:...\"\n}",
+  "expected_hash": "0x...",
+  "merchant_id": "1",
+  "agent": "0x...",
+  "quote_hash": "0x...",
+  "encryption": "x25519-xsalsa20-poly1305",
+  "merchant_key_id": "did:key:z6MkMerchantFulfillmentKey"
+}
+```
+
+Response `201`:
+```json
+{
+  "payload_hash": "0x...",
+  "merchant_id": "1",
+  "agent": "0x...",
+  "quote_hash": "0x...",
+  "encryption": "x25519-xsalsa20-poly1305",
+  "merchant_key_id": "did:key:z6MkMerchantFulfillmentKey",
+  "size_bytes": 1024,
+  "uri": "https://api.cortex.wallyweb.com/fulfillment-payloads/0x...",
+  "canonical_json": "{\"ciphertext\":\"base64:...\",\"schema\":\"cortex.encrypted-fulfillment.v1\"}"
+}
+```
+
+Fetch canonical ciphertext envelope JSON at `GET /fulfillment-payloads/:hash`. Metadata is available at `GET /fulfillment-payloads/:hash/metadata`.
 
 ---
 

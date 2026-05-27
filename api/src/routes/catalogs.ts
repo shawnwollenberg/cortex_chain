@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request } from "express";
 import type pg from "pg";
-import { keccak256, toBytes } from "viem";
+import { parseCanonicalJsonDocument } from "../canonical-json.js";
 import { isValidId } from "../utils.js";
 
 const MAX_CATALOG_BYTES = 128 * 1024;
@@ -32,15 +32,12 @@ export function createCatalogsRouter(pool: pg.Pool): Router {
         res.status(400).json({ error: "catalog_json is required" });
         return;
       }
-      const sizeBytes = Buffer.byteLength(catalogJson, "utf8");
-      if (sizeBytes > MAX_CATALOG_BYTES) {
-        res.status(413).json({ error: `Catalog exceeds ${MAX_CATALOG_BYTES} bytes` });
-        return;
-      }
+      let document;
       try {
-        JSON.parse(catalogJson);
-      } catch {
-        res.status(400).json({ error: "catalog_json must be valid JSON" });
+        document = parseCanonicalJsonDocument(catalogJson, "catalog_json", MAX_CATALOG_BYTES);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "catalog_json must be valid JSON";
+        res.status(message.includes("exceeds") ? 413 : 400).json({ error: message });
         return;
       }
       if (expectedHash && !isBytes32(expectedHash)) {
@@ -56,7 +53,7 @@ export function createCatalogsRouter(pool: pg.Pool): Router {
         return;
       }
 
-      const catalogHash = keccak256(toBytes(catalogJson)).toLowerCase();
+      const catalogHash = document.hash;
       if (expectedHash && expectedHash !== catalogHash) {
         res.status(409).json({ error: "expected_hash does not match catalog_json", catalog_hash: catalogHash });
         return;
@@ -72,12 +69,13 @@ export function createCatalogsRouter(pool: pg.Pool): Router {
              size_bytes = EXCLUDED.size_bytes,
              updated_at = now()
          RETURNING catalog_hash, merchant_id, service_id, size_bytes, created_at, updated_at`,
-        [catalogHash, merchantId, serviceId, catalogJson, sizeBytes],
+        [catalogHash, merchantId, serviceId, document.text, document.sizeBytes],
       );
 
       res.status(201).json({
         ...result.rows[0],
         uri: `${publicBaseUrl(req)}/catalogs/${catalogHash}`,
+        canonical_json: document.text,
       });
     } catch (err) {
       next(err);

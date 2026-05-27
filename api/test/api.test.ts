@@ -3,6 +3,7 @@ import pg from "pg";
 import { createApp } from "../src/app.js";
 import type { Server } from "node:http";
 import { keccak256, toBytes } from "viem";
+import { canonicalizeJson } from "../src/canonical-json.js";
 
 const TEST_DATABASE_URL = process.env.DATABASE_URL ?? "postgres://localhost:5432/ai_chain_test";
 
@@ -134,14 +135,14 @@ beforeAll(async () => {
   pool = new pg.Pool({ connectionString: TEST_DATABASE_URL });
 
   // Drop and recreate tables
-  await pool.query("DROP TABLE IF EXISTS quote_response_documents, quote_request_documents, catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
+  await pool.query("DROP TABLE IF EXISTS fulfillment_payload_documents, quote_response_documents, quote_request_documents, catalog_documents, disputes, commerce_receipts, quotes, facilitators, services, merchants, solver_bids, attestation_schemas, fills, policies, tx_receipts, pending_intent_metadata, intent_metadata, intents, agents, solvers, attestors, attestations, indexer_state CASCADE");
 
   // Run migrations (read the SQL file)
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql", "011_quote_documents.sql"]) {
+  for (const file of ["001_init.sql", "002_attestations.sql", "003_participants.sql", "004_intent_metadata.sql", "005_pending_intent_metadata.sql", "006_bids_attestation_schemas.sql", "007_onchain_intent_commitments.sql", "008_fill_proofs.sql", "009_commerce.sql", "010_catalog_documents.sql", "011_quote_documents.sql", "012_fulfillment_payloads.sql"]) {
     const migrationPath = resolve(__dirname, "..", "..", "indexer", "migrations", file);
     const sql = readFileSync(migrationPath, "utf-8");
     await pool.query(sql);
@@ -447,31 +448,36 @@ describe("Commerce", () => {
 });
 
 describe("Catalogs", () => {
-  it("POST /catalogs stores exact catalog JSON and GET /catalogs/:hash returns it", async () => {
-    const catalog = JSON.stringify({
+  it("POST /catalogs stores canonical catalog JSON and GET /catalogs/:hash returns it", async () => {
+    const catalogInput = {
       merchant: { name: "Example", network: "base-sepolia" },
       services: [{ service_id: "weather.current", endpoint: "https://merchant.example/weather" }],
-    }, null, 2);
+    };
+    const catalog = JSON.stringify(catalogInput, null, 2);
+    const canonicalCatalog = canonicalizeJson(catalogInput);
     const expectedHash = keccak256(toBytes(catalog));
+    const canonicalHash = keccak256(toBytes(canonicalCatalog));
 
     const res = await fetch(`${baseUrl}/catalogs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         catalog_json: catalog,
-        expected_hash: expectedHash,
+        expected_hash: canonicalHash,
         merchant_id: "1",
         service_id: "weather.current",
       }),
     });
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.catalog_hash).toBe(expectedHash);
-    expect(body.uri).toBe(`${baseUrl}/catalogs/${expectedHash}`);
+    expect(body.catalog_hash).toBe(canonicalHash);
+    expect(body.canonical_json).toBe(canonicalCatalog);
+    expect(body.uri).toBe(`${baseUrl}/catalogs/${canonicalHash}`);
 
     const catalogRes = await fetch(body.uri);
     expect(catalogRes.status).toBe(200);
-    expect(await catalogRes.text()).toBe(catalog);
+    expect(await catalogRes.text()).toBe(canonicalCatalog);
+    expect(expectedHash).not.toBe(canonicalHash);
   });
 
   it("POST /catalogs rejects mismatched expected_hash", async () => {
@@ -488,8 +494,8 @@ describe("Catalogs", () => {
 });
 
 describe("Quote Documents", () => {
-  it("POST /quote-requests stores exact request JSON and GET /quote-requests/:hash returns it", async () => {
-    const quoteRequest = JSON.stringify({
+  it("POST /quote-requests stores canonical request JSON and GET /quote-requests/:hash returns it", async () => {
+    const quoteRequestInput = {
       request_id: "req-test",
       merchant_id: "1",
       service_numeric_id: "1",
@@ -497,8 +503,10 @@ describe("Quote Documents", () => {
       agent: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       input: { city: "Austin" },
       accepted_payment_rails: ["transfer", "x402"],
-    }, null, 2);
-    const expectedHash = keccak256(toBytes(quoteRequest));
+    };
+    const quoteRequest = JSON.stringify(quoteRequestInput, null, 2);
+    const canonicalQuoteRequest = canonicalizeJson(quoteRequestInput);
+    const expectedHash = keccak256(toBytes(canonicalQuoteRequest));
 
     const res = await fetch(`${baseUrl}/quote-requests`, {
       method: "POST",
@@ -516,11 +524,11 @@ describe("Quote Documents", () => {
 
     const requestRes = await fetch(body.uri);
     expect(requestRes.status).toBe(200);
-    expect(await requestRes.text()).toBe(quoteRequest);
+    expect(await requestRes.text()).toBe(canonicalQuoteRequest);
   });
 
-  it("POST /quote-responses stores exact response JSON and links request hash", async () => {
-    const quoteRequest = JSON.stringify({ request_id: "req-response-test" }, null, 2);
+  it("POST /quote-responses stores canonical response JSON and links request hash", async () => {
+    const quoteRequest = canonicalizeJson({ request_id: "req-response-test" });
     const requestHash = keccak256(toBytes(quoteRequest));
     await fetch(`${baseUrl}/quote-requests`, {
       method: "POST",
@@ -528,7 +536,7 @@ describe("Quote Documents", () => {
       body: JSON.stringify({ quote_request_json: quoteRequest, expected_hash: requestHash }),
     });
 
-    const quoteResponse = JSON.stringify({
+    const quoteResponseInput = {
       request_id: "req-response-test",
       quote: {
         merchantId: "1",
@@ -537,8 +545,10 @@ describe("Quote Documents", () => {
         amount: "1000000",
       },
       terms_document: "Weather result for one city.",
-    }, null, 2);
-    const expectedHash = keccak256(toBytes(quoteResponse));
+    };
+    const quoteResponse = JSON.stringify(quoteResponseInput, null, 2);
+    const canonicalQuoteResponse = canonicalizeJson(quoteResponseInput);
+    const expectedHash = keccak256(toBytes(canonicalQuoteResponse));
 
     const res = await fetch(`${baseUrl}/quote-responses`, {
       method: "POST",
@@ -557,7 +567,7 @@ describe("Quote Documents", () => {
 
     const responseRes = await fetch(body.uri);
     expect(responseRes.status).toBe(200);
-    expect(await responseRes.text()).toBe(quoteResponse);
+    expect(await responseRes.text()).toBe(canonicalQuoteResponse);
   });
 
   it("POST /quote-requests rejects mismatched expected_hash", async () => {
@@ -567,6 +577,65 @@ describe("Quote Documents", () => {
       body: JSON.stringify({
         quote_request_json: "{\"request_id\":\"bad\"}",
         expected_hash: `0x${"22".repeat(32)}`,
+      }),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe("Fulfillment Payloads", () => {
+  it("POST /fulfillment-payloads stores canonical encrypted payload JSON and GET returns it", async () => {
+    const payloadInput = {
+      schema: "cortex.encrypted-fulfillment.v1",
+      merchant_id: "1",
+      agent: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      quote_hash: `0x${"11".repeat(32)}`,
+      encryption: "x25519-xsalsa20-poly1305",
+      merchant_key_id: "did:key:z6MkMerchantFulfillmentKey",
+      ciphertext: "base64:encrypted-shipping-payload",
+      contains: ["shipping_name", "shipping_address", "delivery_instructions"],
+    };
+    const payload = JSON.stringify(payloadInput, null, 2);
+    const canonicalPayload = canonicalizeJson(payloadInput);
+    const expectedHash = keccak256(toBytes(canonicalPayload));
+
+    const res = await fetch(`${baseUrl}/fulfillment-payloads`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fulfillment_payload_json: payload,
+        expected_hash: expectedHash,
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.payload_hash).toBe(expectedHash);
+    expect(body.merchant_id).toBe("1");
+    expect(body.encryption).toBe("x25519-xsalsa20-poly1305");
+    expect(body.merchant_key_id).toBe("did:key:z6MkMerchantFulfillmentKey");
+    expect(body.uri).toBe(`${baseUrl}/fulfillment-payloads/${expectedHash}`);
+
+    const payloadRes = await fetch(body.uri);
+    expect(payloadRes.status).toBe(200);
+    expect(await payloadRes.text()).toBe(canonicalPayload);
+
+    const metadataRes = await fetch(`${body.uri}/metadata`);
+    expect(metadataRes.status).toBe(200);
+    const metadata = await metadataRes.json();
+    expect(metadata.payload_hash).toBe(expectedHash);
+  });
+
+  it("POST /fulfillment-payloads rejects mismatched expected_hash", async () => {
+    const res = await fetch(`${baseUrl}/fulfillment-payloads`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fulfillment_payload_json: JSON.stringify({
+          encryption: "x25519-xsalsa20-poly1305",
+          merchant_key_id: "merchant-key",
+          ciphertext: "base64:ciphertext",
+        }),
+        expected_hash: `0x${"99".repeat(32)}`,
       }),
     });
     expect(res.status).toBe(409);

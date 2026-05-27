@@ -13,6 +13,7 @@
 - [Examples](/docs/examples.md): Merchant onboarding, agent smart accounts, payment policies, quote commitments, receipts, and SDK usage
 - [SDK Examples](/docs/sdk-examples.md): TypeScript flows for merchant discovery, quote commitments, payments, x402 policy, receipts, disputes, analytics, and reputation
 - [Settlement Plans](/docs/settlement-plans.md): Quote-bound multi-merchant splits, tax reserves, tips, fees, and agent validation rules
+- [Settlement Adapter](/docs/settlement-adapter.md): Direct native and ERC-20 split payout adapter design for quote-bound settlement plans
 - [Product Onboarding](/docs/product-onboarding.md): Guided onboarding workspace for merchant profiles, service catalogs, agent policy, and quote acceptance
 - [Value Proposition and Use Cases](/docs/value-prop-use-cases.md): Strategic positioning, customer segments, use cases, wedges, product gaps, and messaging
 - [Agentic Commerce](/docs/agentic-commerce.md): Merchant registry, service discovery, quote, receipt, dispute, trust-signal, payment-rail, and x402 policy model
