@@ -9,6 +9,7 @@ import {AttestationRegistry} from "../src/AttestationRegistry.sol";
 import {SolverRegistry} from "../src/SolverRegistry.sol";
 import {AttestorRegistry} from "../src/AttestorRegistry.sol";
 import {CommerceRegistry} from "../src/CommerceRegistry.sol";
+import {SettlementAdapter} from "../src/SettlementAdapter.sol";
 
 contract Deploy is Script {
     function run() external {
@@ -34,6 +35,9 @@ contract Deploy is Script {
 
         CommerceRegistry commerceRegistry = new CommerceRegistry();
         console.log("CommerceRegistry deployed at:", address(commerceRegistry));
+
+        SettlementAdapter settlementAdapter = new SettlementAdapter();
+        console.log("SettlementAdapter deployed at:", address(settlementAdapter));
 
         vm.stopBroadcast();
     }

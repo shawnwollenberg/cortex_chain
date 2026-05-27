@@ -1,17 +1,21 @@
 # Settlement Adapter Design
 
-Cortex currently binds settlement instructions into `termsHash` and lets payment happen through direct transfers, swaps, facilitators, or x402. The first settlement adapter should execute the simplest case: direct native-token or ERC-20 split payouts for a quote-bound settlement plan.
+Cortex binds settlement instructions into `termsHash` and lets payment happen through direct transfers, swaps, facilitators, x402, or a settlement adapter. The first concrete adapter executes direct native-token or ERC-20 split payouts for a quote-bound settlement plan.
 
-## Goal
+## Contract
 
-Turn a verified `cortex.settlement-plan.v1` document into deterministic payment execution without putting private fulfillment data onchain.
+`contracts/src/SettlementAdapter.sol` implements `ISettlementAdapter.executeSettlement`.
+
+It turns a verified `cortex.settlement-plan.v1` document into deterministic payment execution without putting private fulfillment data onchain.
+
+Base Sepolia deployment: `0xbD61097Cc7b7E1F03E88Fe20E9512ff091126cb3`.
 
 The adapter should:
 
 - Accept a `quoteHash` and `settlementPlanHash`.
 - Accept deterministic line data derived from the canonical settlement plan.
 - Verify the sum of executable line amounts equals `grossAmount`.
-- Transfer funds to recipients for line kinds such as merchant, supplier, tax, tip, shipping, handling, platform fee, facilitator fee, protocol fee, and escrow.
+- Transfer native ETH or ERC-20 funds to recipients for line kinds such as merchant, supplier, tax, tip, shipping, handling, platform fee, facilitator fee, protocol fee, and escrow.
 - Emit a single `SettlementExecuted` event with an `executionHash`.
 - Leave encrypted fulfillment payloads offchain and reference only hashes.
 
@@ -30,7 +34,7 @@ The adapter does not parse JSON. Agents and merchants verify the canonical settl
 
 ## Direct Split Adapter
 
-The first concrete adapter should support:
+The first concrete adapter supports:
 
 - Native token split when `token == address(0)`.
 - ERC-20 split when `token != address(0)`.

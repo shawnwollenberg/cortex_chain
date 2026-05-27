@@ -63,6 +63,9 @@ The read-only preflight panel can connect to an injected wallet to check the sel
    - Build the onchain quote payload.
    - Generate resource, settlement-plan terms, and x402 payload hashes from their source documents.
    - Generate a viem template for `computeQuoteHash` and `commitQuote`.
+   - Use direct native/ERC-20 payment controls for simple one-recipient transfer rails.
+   - Approve and execute the settlement adapter for multi-recipient settlement plans.
+   - Publish encrypted fulfillment payloads and canonical fulfillment evidence, then record fulfillment against the receipt.
    - Download quote request and response JSON files for local testing.
    - Show the agent-side acceptance checklist for merchant/service state, metadata hashes, settlement totals, tax recipients, encrypted fulfillment payloads, rail/facilitator matching, account policy, x402 payload hash, expiry, and nonce.
    - Check indexed merchant reputation before accepting a quote.
@@ -77,7 +80,6 @@ The read-only preflight panel can connect to an injected wallet to check the sel
 
 ## Next Product Improvements
 
-- Use the onboarding page to generate or paste a merchant fulfillment public key, encrypt shipping details in the browser, publish the canonical ciphertext envelope, and bind its hash into the settlement plan.
-- Publish canonical fulfillment evidence documents after settlement, then call `recordFulfillment(receiptId, evidenceHash)` so receipts point at a retrievable evidence record.
+- Add more seeded presets beyond the physical-goods bundle, including API access, SaaS subscription, and marketplace checkout.
 - Expand SDK examples into runnable sample scripts for transfer, swap, facilitator, and x402 payments.
 - Add guided post-transaction verification against the hosted API.

@@ -13,6 +13,7 @@ Use your own RPC and contract addresses for writes:
 ```bash
 export RPC_URL=https://sepolia.base.org
 export COMMERCE_REGISTRY_ADDRESS=0xf0bf44b28567f0b3d2370dc7af8a63335746d8d4
+export SETTLEMENT_ADAPTER_ADDRESS=0xbD61097Cc7b7E1F03E88Fe20E9512ff091126cb3
 export AGENT_REGISTRY_ADDRESS=0x24ca7dc7747b0166e73a2d6d99ce677476f046f3
 export POLICY_MODULE_ADDRESS=0xb2686c5cc3ab7ce45acfe0091698d9b6a16c2d0c
 export INTENT_BOOK_ADDRESS=0x16f7e7c4856bad4dcbe61400630087dab75b229e
@@ -369,7 +370,41 @@ Agents should compare the quoted terms against their local request and policy be
 
 ## 7. Record a Receipt and Fulfillment
 
-After payment settlement, the facilitator records the receipt. The merchant or facilitator can later attach canonical fulfillment evidence. For physical goods, keep tracking numbers, delivery photos, and address data private; publish hashes and encrypted references.
+Before recording a receipt for a split payment, execute the settlement plan. Direct one-recipient payments can use wallet-to-wallet native ETH or ERC-20 transfers. Multi-party physical-goods purchases should use the settlement adapter so every settlement line is paid atomically.
+
+```ts
+const settlementInstruction = {
+  quoteHash,
+  settlementPlanHash: termsHash,
+  payer: agentAddress,
+  token: USDC_ADDRESS,
+  grossAmount: 1_000_000n,
+  deadline: BigInt(Math.floor(Date.now() / 1000) + 3600),
+  lines: [
+    { kind: 0, recipient: merchantPayoutAddress, token: USDC_ADDRESS, amount: 700_000n, metadataHash: keccak256(toBytes("merchant")) },
+    { kind: 1, recipient: partnerMerchantAddress, token: USDC_ADDRESS, amount: 180_000n, metadataHash: keccak256(toBytes("supplier")) },
+    { kind: 2, recipient: taxReserveAddress, token: USDC_ADDRESS, amount: 70_000n, metadataHash: keccak256(toBytes("tax")) },
+    { kind: 4, recipient: shippingWallet, token: USDC_ADDRESS, amount: 30_000n, metadataHash: keccak256(toBytes("shipping")) },
+    { kind: 5, recipient: fulfillmentWallet, token: USDC_ADDRESS, amount: 20_000n, metadataHash: keccak256(toBytes("handling")) },
+  ],
+};
+
+await walletClient.writeContract({
+  address: USDC_ADDRESS,
+  abi: ERC20ABI,
+  functionName: "approve",
+  args: [SETTLEMENT_ADAPTER_ADDRESS, settlementInstruction.grossAmount],
+});
+
+const settlementTx = await walletClient.writeContract({
+  address: SETTLEMENT_ADAPTER_ADDRESS,
+  abi: SettlementAdapterABI,
+  functionName: "executeSettlement",
+  args: [settlementInstruction],
+});
+```
+
+After payment settlement, the merchant, agent, or facilitator records the receipt. The merchant or facilitator can later attach canonical fulfillment evidence. For physical goods, keep tracking numbers, delivery photos, and address data private; publish hashes and encrypted references.
 
 ```ts
 const receiptHash = await facilitatorWallet.writeContract({

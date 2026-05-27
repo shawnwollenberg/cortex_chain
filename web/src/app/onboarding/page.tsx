@@ -143,6 +143,63 @@ const COMMERCE_WRITE_ABI = [
   },
 ] as const;
 
+const ERC20_WRITE_ABI = [
+  {
+    type: "function",
+    name: "approve",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "ok", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "transfer",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "ok", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+const SETTLEMENT_ADAPTER_WRITE_ABI = [
+  {
+    type: "function",
+    name: "executeSettlement",
+    inputs: [
+      {
+        name: "instruction",
+        type: "tuple",
+        components: [
+          { name: "quoteHash", type: "bytes32" },
+          { name: "settlementPlanHash", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "token", type: "address" },
+          { name: "grossAmount", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+          {
+            name: "lines",
+            type: "tuple[]",
+            components: [
+              { name: "kind", type: "uint8" },
+              { name: "recipient", type: "address" },
+              { name: "token", type: "address" },
+              { name: "amount", type: "uint256" },
+              { name: "metadataHash", type: "bytes32" },
+            ],
+          },
+        ],
+      },
+    ],
+    outputs: [{ name: "executionHash", type: "bytes32" }],
+    stateMutability: "payable",
+  },
+] as const;
+
 const AGENT_WRITE_ABI = [
   {
     type: "function",
@@ -175,7 +232,7 @@ const POLICY_WRITE_ABI = [
 ] as const;
 
 type StepId = "merchant" | "service" | "catalog" | "agent" | "quote";
-type TxKey = "merchant" | "service" | "agent" | "policy" | "quote" | "receipt" | "fulfillment";
+type TxKey = "merchant" | "service" | "agent" | "policy" | "quote" | "payment" | "approval" | "settlement" | "receipt" | "fulfillment";
 type LookupState = {
   loading: boolean;
   error: string | null;
@@ -688,6 +745,9 @@ export default function OnboardingPage() {
     agent: { loading: false, error: null, hash: null },
     policy: { loading: false, error: null, hash: null },
     quote: { loading: false, error: null, hash: null },
+    payment: { loading: false, error: null, hash: null },
+    approval: { loading: false, error: null, hash: null },
+    settlement: { loading: false, error: null, hash: null },
     receipt: { loading: false, error: null, hash: null },
     fulfillment: { loading: false, error: null, hash: null },
   });
@@ -737,6 +797,7 @@ export default function OnboardingPage() {
   const [facilitator, setFacilitator] = useState(ZERO_ADDRESS);
 
   const [serviceNumericId, setServiceNumericId] = useState("1");
+  const [settlementAdapterAddress, setSettlementAdapterAddress] = useState("0xbD61097Cc7b7E1F03E88Fe20E9512ff091126cb3");
   const [quoteAgent, setQuoteAgent] = useState("0x...");
   const [amount, setAmount] = useState("1000000");
   const [paymentRail, setPaymentRail] = useState("3");
@@ -1386,11 +1447,40 @@ await merchantWallet.writeContract({
   args: [quote],
 });`;
 
+  const settlementAdapterCommand = `// Execute direct split settlement before recording the receipt.
+// For native ETH, token must be ${ZERO_ADDRESS} and value must equal quote.amount.
+// For ERC-20, approve the settlement adapter first.
+
+const settlementInstruction = {
+  quoteHash: "${quoteHash}",
+  settlementPlanHash: "${termsHash}",
+  payer: agentAddress,
+  token: "${token}",
+  grossAmount: BigInt("${amount}"),
+  deadline: BigInt("${expiresAt}"),
+  lines: [
+    { kind: 0, recipient: "${payout}", token: "${token}", amount: BigInt("${primarySettlementAmount}"), metadataHash: keccak256(toBytes("primary merchant")) },
+    { kind: 1, recipient: "${partnerSettlementRecipient}", token: "${token}", amount: BigInt("${partnerSettlementAmount}"), metadataHash: keccak256(toBytes("partner merchant")) },
+    { kind: 2, recipient: "${taxSettlementRecipient}", token: "${token}", amount: BigInt("${taxSettlementAmount}"), metadataHash: keccak256(toBytes("${taxJurisdiction}")) },
+    { kind: 3, recipient: "${tipSettlementRecipient}", token: "${token}", amount: BigInt("${tipSettlementAmount}"), metadataHash: keccak256(toBytes("tip")) },
+    { kind: 4, recipient: "${shippingSettlementRecipient}", token: "${token}", amount: BigInt("${shippingSettlementAmount}"), metadataHash: keccak256(toBytes("${shippingMethod}")) },
+    { kind: 5, recipient: "${handlingSettlementRecipient}", token: "${token}", amount: BigInt("${handlingSettlementAmount}"), metadataHash: keccak256(toBytes("handling")) },
+  ],
+};
+
+const tx = await walletClient.writeContract({
+  address: "${settlementAdapterAddress}",
+  abi: SettlementAdapterABI,
+  functionName: "executeSettlement",
+  args: [settlementInstruction],
+});`;
+
   const merchantPayoutValid = isAddress(payout);
   const merchantOwnerValid = isAddress(merchantOwner);
   const agentOwnerValid = isAddress(agentOwner);
   const tokenValid = isAddress(token);
   const facilitatorValid = isAddress(facilitator);
+  const settlementAdapterValid = isAddress(settlementAdapterAddress);
   const quoteAgentValid = isAddress(quoteAgent);
   const setTxState = (key: TxKey, patch: Partial<TxState>) => {
     setTxStates((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
@@ -1725,6 +1815,49 @@ await merchantWallet.writeContract({
     setAgentOwner(walletCheck.account);
     setQuoteAgent(walletCheck.account);
   };
+  const loadPhysicalGoodsDemo = () => {
+    const buyer = walletCheck.account && isAddress(walletCheck.account) ? walletCheck.account : "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    setMerchantName("Cortex Hat Co.");
+    setWebsite("https://hat.example");
+    setSupport("support@hat.example");
+    setMerchantOwner("0x1111111111111111111111111111111111111111");
+    setPayout("0x2222222222222222222222222222222222222222");
+    setRefundPolicy("Refund if the bundled hat and shirt shipment is not accepted by the carrier before the quote expiry.");
+    setServiceId("hat-shirt-bundle-v1");
+    setServiceName("Hat and shirt bundle");
+    setCapability("physical_goods.bundle.apparel");
+    setServiceDescription("Ships one hat from the primary merchant and one shirt from a partner supplier.");
+    setQuoteAgent(buyer);
+    setAgentOwner(buyer);
+    setToken(ZERO_ADDRESS);
+    setFacilitator(ZERO_ADDRESS);
+    setPaymentRail("0");
+    setAmount("100000000000000000");
+    setPrimarySettlementAmount("70000000000000000");
+    setPartnerSettlementRecipient("0x3333333333333333333333333333333333333333");
+    setPartnerSettlementAmount("18000000000000000");
+    setTaxSettlementRecipient("0x4444444444444444444444444444444444444444");
+    setTaxSettlementAmount("7000000000000000");
+    setTaxJurisdiction("OH-Franklin-County");
+    setTipSettlementRecipient("0x5555555555555555555555555555555555555555");
+    setTipSettlementAmount("1000000000000000");
+    setShippingSettlementRecipient("0x6666666666666666666666666666666666666666");
+    setShippingSettlementAmount("3000000000000000");
+    setShippingMethod("ground-tracked");
+    setHandlingSettlementRecipient("0x7777777777777777777777777777777777777777");
+    setHandlingSettlementAmount("1000000000000000");
+    setResourceDescriptor("physical-goods:hat-shirt-bundle:v1");
+    setTermsDocument("One hat and one partner-supplied shirt shipped as a bundled physical-goods purchase.");
+    setQuoteRequestInput('{"items":[{"sku":"hat-black","quantity":1},{"sku":"shirt-white-m","quantity":1}],"ship_to_country":"US"}');
+    setShippingName("Jane Buyer");
+    setShippingLine1("123 Commerce Ave");
+    setShippingCity("Columbus");
+    setShippingRegion("OH");
+    setShippingPostalCode("43215");
+    setShippingCountry("US");
+    setDeliveryInstructions("Ship as one bundle when possible.");
+    setStep("quote");
+  };
   const sendRegisterMerchant = async () => {
     await sendTx("merchant", async (provider, account) => {
       const data = encodeFunctionData({
@@ -1802,6 +1935,67 @@ await merchantWallet.writeContract({
       return sendWalletTransaction(provider, account, CONTRACTS.commerceRegistry, data);
     });
   };
+  const sendDirectNativePayment = async () => {
+    await sendTx("payment", async (provider, account) => {
+      if (token !== ZERO_ADDRESS) throw new Error("Set token to the zero address for native ETH payments.");
+      return sendWalletTransaction(provider, account, parseAddress(payout, "payout address"), "0x", parseUint(amount, "amount"));
+    });
+  };
+  const sendDirectERC20Payment = async () => {
+    await sendTx("payment", async (provider, account) => {
+      if (token === ZERO_ADDRESS) throw new Error("Use direct native payment when token is the zero address.");
+      const data = encodeFunctionData({
+        abi: ERC20_WRITE_ABI,
+        functionName: "transfer",
+        args: [parseAddress(payout, "payout address"), parseUint(amount, "amount")],
+      });
+      return sendWalletTransaction(provider, account, parseAddress(token, "token"), data);
+    });
+  };
+  const sendApproveSettlementAdapter = async () => {
+    await sendTx("approval", async (provider, account) => {
+      if (token === ZERO_ADDRESS) throw new Error("Native ETH settlement does not need ERC-20 approval.");
+      const data = encodeFunctionData({
+        abi: ERC20_WRITE_ABI,
+        functionName: "approve",
+        args: [parseAddress(settlementAdapterAddress, "settlement adapter"), parseUint(amount, "amount")],
+      });
+      return sendWalletTransaction(provider, account, parseAddress(token, "token"), data);
+    });
+  };
+  const sendExecuteSettlementAdapter = async () => {
+    await sendTx("settlement", async (provider, account) => {
+      const instruction = buildSettlementInstruction({
+        quoteHash,
+        termsHash,
+        payer: account,
+        token,
+        amount,
+        expiresAt,
+        payout,
+        primarySettlementAmount,
+        partnerSettlementRecipient,
+        partnerSettlementAmount,
+        taxSettlementRecipient,
+        taxSettlementAmount,
+        taxJurisdiction,
+        tipSettlementRecipient,
+        tipSettlementAmount,
+        shippingSettlementRecipient,
+        shippingSettlementAmount,
+        shippingMethod,
+        handlingSettlementRecipient,
+        handlingSettlementAmount,
+      });
+      const data = encodeFunctionData({
+        abi: SETTLEMENT_ADAPTER_WRITE_ABI,
+        functionName: "executeSettlement",
+        args: [instruction],
+      });
+      const value = token === ZERO_ADDRESS ? parseUint(amount, "amount") : undefined;
+      return sendWalletTransaction(provider, account, parseAddress(settlementAdapterAddress, "settlement adapter"), data, value);
+    });
+  };
   const sendRecordReceipt = async () => {
     await sendTx("receipt", async (provider, account) => {
       const data = encodeFunctionData({
@@ -1854,6 +2048,13 @@ await merchantWallet.writeContract({
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
+            <button
+              type="button"
+              onClick={loadPhysicalGoodsDemo}
+              className="rounded-md border border-border px-3 py-2 text-muted hover:text-text"
+            >
+              Load physical goods demo
+            </button>
             <Link href="/docs/examples" className="rounded-md border border-border px-3 py-2 text-muted hover:text-text">
               Examples
             </Link>
@@ -2142,6 +2343,8 @@ cast send "${CONTRACTS.commerceRegistry}" \\
               <div className="mt-5 grid gap-4">
                 <Field label="Merchant ID" value={merchantId} onChange={setMerchantId} />
                 <Field label="Service numeric ID" value={serviceNumericId} onChange={setServiceNumericId} />
+                <Field label="Settlement adapter" value={settlementAdapterAddress} onChange={setSettlementAdapterAddress} />
+                <StatusPill ok={settlementAdapterValid} label={settlementAdapterValid ? "Valid adapter address" : "Enter deployed adapter address"} />
                 <Field label="Agent address" value={quoteAgent} onChange={setQuoteAgent} />
                 <StatusPill ok={quoteAgentValid} label={quoteAgentValid ? "Valid agent address" : "Enter a 0x agent address"} />
                 <Field label="Token" value={token} onChange={setToken} />
@@ -2321,6 +2524,39 @@ cast send "${CONTRACTS.commerceRegistry}" \\
               <CodePanel title="Hosted quote exchange" value={quoteExchangeSummary} />
               <CodePanel title="Quote payload" value={quotePayload} />
               <CodePanel title="Compute and commit quote" value={quoteCommand} />
+              <CodePanel title="Execute settlement adapter" value={settlementAdapterCommand} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <TransactionPanel
+                  title="Direct native payment"
+                  description="Sends native ETH to the primary merchant payout address. Use this for simple transfer rails without split execution."
+                  actionLabel="Pay native"
+                  state={txStates.payment}
+                  onSend={sendDirectNativePayment}
+                />
+                <TransactionPanel
+                  title="Direct ERC-20 payment"
+                  description="Transfers the quoted ERC-20 amount to the primary merchant payout address. Split settlement should use the adapter."
+                  actionLabel="Pay ERC-20"
+                  state={txStates.payment}
+                  onSend={sendDirectERC20Payment}
+                />
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <TransactionPanel
+                  title="Approve settlement adapter"
+                  description="Approves the adapter for ERC-20 split settlement. Native ETH settlement skips this step."
+                  actionLabel="Approve adapter"
+                  state={txStates.approval}
+                  onSend={sendApproveSettlementAdapter}
+                />
+                <TransactionPanel
+                  title="Execute split settlement"
+                  description="Pays every settlement line from the canonical plan through the settlement adapter."
+                  actionLabel="Execute settlement"
+                  state={txStates.settlement}
+                  onSend={sendExecuteSettlementAdapter}
+                />
+              </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <TransactionPanel
                   title="Commit quote with wallet"
@@ -2581,10 +2817,11 @@ async function sendWalletTransaction(
   from: `0x${string}`,
   to: string,
   data: string,
+  value?: bigint,
 ) {
   return provider.request({
     method: "eth_sendTransaction",
-    params: [{ from, to, data }],
+    params: [{ from, to, data, ...(value !== undefined ? { value: `0x${value.toString(16)}` } : {}) }],
   }) as Promise<string>;
 }
 
@@ -2615,6 +2852,83 @@ function buildQuoteCommitment(input: {
     resourceHash: parseBytes32(input.resourceHash, "resource hash"),
     termsHash: parseBytes32(input.termsHash, "terms hash"),
     x402PayloadHash: parseBytes32(input.x402PayloadHash, "x402 payload hash"),
+  };
+}
+
+function buildSettlementInstruction(input: {
+  quoteHash: string;
+  termsHash: string;
+  payer: string;
+  token: string;
+  amount: string;
+  expiresAt: string;
+  payout: string;
+  primarySettlementAmount: string;
+  partnerSettlementRecipient: string;
+  partnerSettlementAmount: string;
+  taxSettlementRecipient: string;
+  taxSettlementAmount: string;
+  taxJurisdiction: string;
+  tipSettlementRecipient: string;
+  tipSettlementAmount: string;
+  shippingSettlementRecipient: string;
+  shippingSettlementAmount: string;
+  shippingMethod: string;
+  handlingSettlementRecipient: string;
+  handlingSettlementAmount: string;
+}) {
+  const token = parseAddress(input.token, "token");
+  return {
+    quoteHash: parseBytes32(input.quoteHash, "quote hash"),
+    settlementPlanHash: parseBytes32(input.termsHash, "settlement plan hash"),
+    payer: parseAddress(input.payer, "payer"),
+    token,
+    grossAmount: parseUint(input.amount, "amount"),
+    deadline: parseUint(input.expiresAt, "expiry"),
+    lines: [
+      {
+        kind: 0,
+        recipient: parseAddress(input.payout, "primary merchant recipient"),
+        token,
+        amount: parseUint(input.primarySettlementAmount, "primary merchant amount"),
+        metadataHash: hashText("primary merchant"),
+      },
+      {
+        kind: 1,
+        recipient: parseAddress(input.partnerSettlementRecipient, "partner merchant recipient"),
+        token,
+        amount: parseUint(input.partnerSettlementAmount, "partner merchant amount"),
+        metadataHash: hashText("partner merchant"),
+      },
+      {
+        kind: 2,
+        recipient: parseAddress(input.taxSettlementRecipient, "tax recipient"),
+        token,
+        amount: parseUint(input.taxSettlementAmount, "tax amount"),
+        metadataHash: hashText(input.taxJurisdiction),
+      },
+      {
+        kind: 3,
+        recipient: parseAddress(input.tipSettlementRecipient, "tip recipient"),
+        token,
+        amount: parseUint(input.tipSettlementAmount, "tip amount"),
+        metadataHash: hashText("tip"),
+      },
+      {
+        kind: 4,
+        recipient: parseAddress(input.shippingSettlementRecipient, "shipping recipient"),
+        token,
+        amount: parseUint(input.shippingSettlementAmount, "shipping amount"),
+        metadataHash: hashText(input.shippingMethod),
+      },
+      {
+        kind: 5,
+        recipient: parseAddress(input.handlingSettlementRecipient, "handling recipient"),
+        token,
+        amount: parseUint(input.handlingSettlementAmount, "handling amount"),
+        metadataHash: hashText("handling"),
+      },
+    ],
   };
 }
 

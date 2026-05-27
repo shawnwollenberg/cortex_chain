@@ -237,6 +237,24 @@ event AttestorUpdated(uint256 indexed attestorId, string metadataURI, bytes32 sc
 
 Registers merchants, services, payment facilitators, quote commitments, receipts, and disputes for agentic commerce.
 
+## SettlementAdapter
+
+Executes quote-bound direct split settlement for canonical `cortex.settlement-plan.v1` documents. The adapter supports native ETH when `token == address(0)` and ERC-20 settlement when the payer has approved the adapter for `grossAmount`.
+
+Base Sepolia: `0xbD61097Cc7b7E1F03E88Fe20E9512ff091126cb3`
+
+### Functions
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `executeSettlement(instruction)` | Payer | Validate hashes, payer, deadline, line tokens, and line total, then pay every settlement line. |
+
+### Events
+
+```solidity
+event SettlementExecuted(bytes32 indexed quoteHash, bytes32 indexed settlementPlanHash, address indexed payer, address token, uint256 grossAmount, bytes32 executionHash);
+```
+
 ### Quote Commitment
 
 ```solidity
