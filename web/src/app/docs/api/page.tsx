@@ -93,6 +93,48 @@ export default function ApiPage() {
         Metadata is available at each route&apos;s <code>/metadata</code> path.
       </p>
 
+      <h3 className="text-lg font-semibold mb-2">Normalize x402 Payment Requirement</h3>
+      <p className="text-sm text-muted mb-2"><code>POST /x402/normalize</code></p>
+      <p className="text-sm text-muted mb-2">
+        Normalizes a facilitator payment requirement into the Cortex canonical x402 shape, hashes it,
+        and can compare the result against a quote&apos;s <code>x402PayloadHash</code>.
+      </p>
+      <CodeBlock language="json">{`{
+  "payment_requirement_json": {
+    "accepts": [{
+      "scheme": "exact",
+      "network": "base-sepolia",
+      "payTo": "0x...",
+      "asset": "0x...",
+      "maxAmountRequired": "1000000",
+      "resource": "https://merchant.example/api/report",
+      "method": "POST",
+      "facilitator": { "url": "https://facilitator.example" },
+      "nonce": "quote-001"
+    }]
+  },
+  "expected_hash": "0x...",
+  "quote": { "x402_payload_hash": "0x..." }
+}`}</CodeBlock>
+      <CodeBlock language="json">{`{
+  "normalized": {
+    "schema": "cortex.x402-payment-requirement.v1",
+    "scheme": "exact",
+    "network": "base-sepolia",
+    "pay_to": "0x...",
+    "asset": "0x...",
+    "amount": "1000000"
+  },
+  "canonical_json": "{\\"amount\\":\\"1000000\\",\\"asset\\":\\"0x...\\"}",
+  "x402_payload_hash": "0x...",
+  "matches_expected_hash": true,
+  "matches_quote_hash": true,
+  "warnings": []
+}`}</CodeBlock>
+      <p className="text-sm text-muted mb-6">
+        Agents should sign only after the normalized hash matches the quote-bound hash and policy checks pass.
+      </p>
+
       <h3 className="text-lg font-semibold mb-2">Publish Encrypted Fulfillment Payload</h3>
       <p className="text-sm text-muted mb-2"><code>POST /fulfillment-payloads</code></p>
       <p className="text-sm text-muted mb-2">

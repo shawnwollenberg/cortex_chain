@@ -19,6 +19,7 @@ export const docsNav: NavGroup[] = [
       { title: "SDK Examples", href: "/docs/sdk-examples" },
       { title: "Settlement Plans", href: "/docs/settlement-plans" },
       { title: "Settlement Adapter", href: "/docs/settlement-adapter" },
+      { title: "x402 Policy", href: "/docs/x402-policy" },
       { title: "Value Prop", href: "/docs/value-prop-use-cases" },
     ],
   },
@@ -29,6 +30,7 @@ export const docsNav: NavGroup[] = [
       { title: "Contracts", href: "/docs/contracts" },
       { title: "REST API", href: "/docs/api" },
       { title: "MCP Server", href: "/docs/mcp" },
+      { title: "Deployment Manifest", href: "/docs/deployment-manifest" },
     ],
   },
   {

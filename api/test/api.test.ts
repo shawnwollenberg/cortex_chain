@@ -583,6 +583,86 @@ describe("Quote Documents", () => {
   });
 });
 
+describe("x402 Normalizer", () => {
+  it("POST /x402/normalize canonicalizes an accepts[] payment requirement", async () => {
+    const x402Requirement = {
+      accepts: [
+        {
+          scheme: "Exact",
+          network: "base-sepolia",
+          payTo: "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          asset: "0x1111111111111111111111111111111111111111",
+          maxAmountRequired: "1000000",
+          resource: "https://merchant.example/api/report",
+          method: "post",
+          facilitator: { url: "https://facilitator.example" },
+          nonce: "quote-001",
+        },
+      ],
+    };
+    const normalized = {
+      schema: "cortex.x402-payment-requirement.v1",
+      scheme: "exact",
+      network: "base-sepolia",
+      resource: "https://merchant.example/api/report",
+      method: "POST",
+      pay_to: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      asset: "0x1111111111111111111111111111111111111111",
+      amount: "1000000",
+      facilitator_url: "https://facilitator.example",
+      nonce: "quote-001",
+    };
+    const canonicalX402 = canonicalizeJson(normalized);
+    const expectedHash = keccak256(toBytes(canonicalX402));
+
+    const res = await fetch(`${baseUrl}/x402/normalize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        payment_requirement_json: x402Requirement,
+        expected_hash: expectedHash,
+        quote: { x402_payload_hash: expectedHash },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.x402_payload_hash).toBe(expectedHash);
+    expect(body.canonical_json).toBe(canonicalX402);
+    expect(body.matches_expected_hash).toBe(true);
+    expect(body.matches_quote_hash).toBe(true);
+  });
+
+  it("POST /x402/normalize rejects missing required fields", async () => {
+    const res = await fetch(`${baseUrl}/x402/normalize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payment_requirement_json: { network: "base-sepolia" } }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("missing");
+  });
+
+  it("POST /x402/normalize rejects mismatched expected_hash", async () => {
+    const res = await fetch(`${baseUrl}/x402/normalize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        payment_requirement_json: {
+          scheme: "exact",
+          network: "base-sepolia",
+          payTo: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          asset: "0x1111111111111111111111111111111111111111",
+          maxAmountRequired: "1000000",
+        },
+        expected_hash: `0x${"99".repeat(32)}`,
+      }),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
 describe("Fulfillment Payloads", () => {
   it("POST /fulfillment-payloads stores canonical encrypted payload JSON and GET returns it", async () => {
     const payloadInput = {
@@ -639,6 +719,24 @@ describe("Fulfillment Payloads", () => {
       }),
     });
     expect(res.status).toBe(409);
+  });
+
+  it("POST /fulfillment-payloads rejects the wrong schema when present", async () => {
+    const res = await fetch(`${baseUrl}/fulfillment-payloads`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fulfillment_payload_json: JSON.stringify({
+          schema: "cortex.plaintext-fulfillment.v1",
+          encryption: "x25519-xsalsa20-poly1305",
+          merchant_key_id: "merchant-key",
+          ciphertext: "base64:ciphertext",
+        }),
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("cortex.encrypted-fulfillment.v1");
   });
 });
 
@@ -698,6 +796,22 @@ describe("Fulfillment Evidence", () => {
       }),
     });
     expect(res.status).toBe(409);
+  });
+
+  it("POST /fulfillment-evidence rejects the wrong schema when present", async () => {
+    const res = await fetch(`${baseUrl}/fulfillment-evidence`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fulfillment_evidence_json: JSON.stringify({
+          schema: "cortex.untrusted-evidence.v1",
+          evidence_type: "shipment",
+        }),
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("cortex.fulfillment-evidence.v1");
   });
 });
 

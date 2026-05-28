@@ -6,6 +6,8 @@ import { isValidAddress, isValidId } from "../utils.js";
 
 const MAX_FULFILLMENT_PAYLOAD_BYTES = 128 * 1024;
 const MAX_FULFILLMENT_EVIDENCE_BYTES = 128 * 1024;
+const FULFILLMENT_PAYLOAD_SCHEMA = "cortex.encrypted-fulfillment.v1";
+const FULFILLMENT_EVIDENCE_SCHEMA = "cortex.fulfillment-evidence.v1";
 
 function isBytes32(value: string): boolean {
   return /^0x[0-9a-fA-F]{64}$/.test(value);
@@ -29,6 +31,11 @@ function readOptionalId(value: unknown, label: string): string | null {
   return id;
 }
 
+function validateOptionalSchema(document: Record<string, unknown>, expected: string): string | null {
+  if (document.schema === undefined || document.schema === null || document.schema === "") return null;
+  return document.schema === expected ? null : `schema must be ${expected}`;
+}
+
 export function createFulfillmentRouter(pool: pg.Pool): Router {
   const router = Router();
 
@@ -44,6 +51,12 @@ export function createFulfillmentRouter(pool: pg.Pool): Router {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Invalid fulfillment_payload_json";
         res.status(message.includes("exceeds") ? 413 : 400).json({ error: message });
+        return;
+      }
+
+      const schemaError = validateOptionalSchema(document.parsed, FULFILLMENT_PAYLOAD_SCHEMA);
+      if (schemaError) {
+        res.status(400).json({ error: schemaError });
         return;
       }
 
@@ -169,6 +182,12 @@ export function createFulfillmentRouter(pool: pg.Pool): Router {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Invalid fulfillment_evidence_json";
         res.status(message.includes("exceeds") ? 413 : 400).json({ error: message });
+        return;
+      }
+
+      const schemaError = validateOptionalSchema(document.parsed, FULFILLMENT_EVIDENCE_SCHEMA);
+      if (schemaError) {
+        res.status(400).json({ error: schemaError });
         return;
       }
 

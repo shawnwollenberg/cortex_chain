@@ -36,6 +36,11 @@ const SECTIONS = [
     description: "Design for direct native and ERC-20 split payout execution from quote-bound settlement plans.",
   },
   {
+    title: "x402 Policy",
+    href: "/docs/x402-policy",
+    description: "Canonical x402 payment requirement hashes, quote binding, and pre-sign policy checks.",
+  },
+  {
     title: "Product Onboarding",
     href: "/onboarding",
     description: "Guided workspace for merchant profiles, service catalogs, agent policy, and quote acceptance.",
@@ -64,6 +69,11 @@ const SECTIONS = [
     title: "MCP Server",
     href: "/docs/mcp",
     description: "Model Context Protocol tools for AI agent integration.",
+  },
+  {
+    title: "Deployment Manifest",
+    href: "/docs/deployment-manifest",
+    description: "Current Base Sepolia, AWS, DNS, environment, and migration inventory.",
   },
   {
     title: "Design Decisions",

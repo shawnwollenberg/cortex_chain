@@ -14,6 +14,7 @@ import { createAnalyticsRouter } from "./routes/analytics.js";
 import { createCatalogsRouter } from "./routes/catalogs.js";
 import { createQuotesRouter } from "./routes/quotes.js";
 import { createFulfillmentRouter } from "./routes/fulfillment.js";
+import { createX402Router } from "./routes/x402.js";
 
 export function createApp(pool: pg.Pool): express.Express {
   const app = express();
@@ -44,6 +45,7 @@ export function createApp(pool: pg.Pool): express.Express {
   app.use("/preflight", createPreflightRouter(pool));
   app.use("/analytics", createAnalyticsRouter(pool));
   app.use("/catalogs", createCatalogsRouter(pool));
+  app.use("/", createX402Router());
   app.use("/", createFulfillmentRouter(pool));
   app.use("/", createQuotesRouter(pool));
   app.use("/", createBidsRouter(pool));

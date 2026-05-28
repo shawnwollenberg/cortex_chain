@@ -152,6 +152,60 @@ Response `201`:
 
 Fetch canonical JSON at `GET /quote-responses/:hash`. Metadata is available at `GET /quote-responses/:hash/metadata`.
 
+#### Normalize x402 Payment Requirement
+
+```
+POST /x402/normalize
+```
+
+Normalizes a facilitator payment requirement into the Cortex canonical x402 shape, hashes the canonical JSON bytes, and optionally compares the result with the quote-bound `x402PayloadHash`.
+
+Request:
+```json
+{
+  "payment_requirement_json": {
+    "accepts": [
+      {
+        "scheme": "exact",
+        "network": "base-sepolia",
+        "payTo": "0x...",
+        "asset": "0x...",
+        "maxAmountRequired": "1000000",
+        "resource": "https://merchant.example/api/report",
+        "method": "POST",
+        "facilitator": { "url": "https://facilitator.example" },
+        "nonce": "quote-001"
+      }
+    ]
+  },
+  "expected_hash": "0x...",
+  "quote": {
+    "x402_payload_hash": "0x..."
+  }
+}
+```
+
+Response `200`:
+```json
+{
+  "normalized": {
+    "schema": "cortex.x402-payment-requirement.v1",
+    "scheme": "exact",
+    "network": "base-sepolia",
+    "pay_to": "0x...",
+    "asset": "0x...",
+    "amount": "1000000"
+  },
+  "canonical_json": "{\"amount\":\"1000000\",\"asset\":\"0x...\"}",
+  "x402_payload_hash": "0x...",
+  "matches_expected_hash": true,
+  "matches_quote_hash": true,
+  "warnings": []
+}
+```
+
+If `expected_hash` is present and does not match the normalized payload, the API returns `409` with the computed hash and canonical JSON. Agents should sign only after this hash matches the quote's `x402PayloadHash` and local policy checks pass.
+
 #### Publish Encrypted Fulfillment Payload
 
 ```

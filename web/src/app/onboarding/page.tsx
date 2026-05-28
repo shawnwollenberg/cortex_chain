@@ -4,6 +4,7 @@ import Link from "next/link";
 import { decodeFunctionResult, encodeFunctionData, isAddress, keccak256, toBytes } from "viem";
 import { useMemo, useState } from "react";
 import { canonicalizeJsonText, hashCanonicalJsonText } from "@/lib/canonical-json";
+import { normalizeX402Requirement } from "@/lib/x402";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://api.cortex.wallyweb.com").replace(/\/$/, "");
 const BASE_SEPOLIA_CHAIN_ID = 84532;
@@ -268,6 +269,12 @@ type CatalogPublishState = {
 };
 
 type QuotePublishState = CatalogPublishState;
+
+type X402VerifyState = {
+  loading: boolean;
+  error: string | null;
+  result: string | null;
+};
 
 type TxState = {
   loading: boolean;
@@ -861,7 +868,33 @@ export default function OnboardingPage() {
       2,
     ),
   );
-  const [x402Payload, setX402Payload] = useState("x402 payment requirement payload");
+  const [x402Payload, setX402Payload] = useState(
+    JSON.stringify(
+      {
+        accepts: [
+          {
+            scheme: "exact",
+            network: "base-sepolia",
+            payTo: payout,
+            asset: token,
+            maxAmountRequired: amount,
+            resource: "https://merchant.example/api/report",
+            method: "POST",
+            facilitator: { url: "https://facilitator.example" },
+            nonce: "quote-001",
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+  const [normalizedX402Payload, setNormalizedX402Payload] = useState("");
+  const [x402VerifyState, setX402VerifyState] = useState<X402VerifyState>({
+    loading: false,
+    error: null,
+    result: null,
+  });
   const [quoteHash, setQuoteHash] = useState(ZERO_HASH);
   const [resultDescriptor, setResultDescriptor] = useState("merchant fulfilled accepted quote");
   const [quoteRequestInput, setQuoteRequestInput] = useState('{"domain":"example.com"}');
@@ -1382,7 +1415,7 @@ cast send "$POLICY_MODULE_ADDRESS" \\
           quote: JSON.parse(quotePayload) as unknown,
           terms_hash_input: "settlement_plan",
           settlement_plan: JSON.parse(settlementPlan) as unknown,
-          payment_requirement: paymentRail === "3" ? safeJson(x402Payload) : null,
+          payment_requirement: paymentRail === "3" ? safeJson(normalizedX402Payload || x402Payload) : null,
           agent_checks: [
             "fetch service catalog and verify metadata hash",
             "verify merchant/service active status",
@@ -1396,7 +1429,7 @@ cast send "$POLICY_MODULE_ADDRESS" \\
         null,
         2,
       ),
-    [quoteRequestId, quotePayload, settlementPlan, paymentRail, x402Payload],
+    [quoteRequestId, quotePayload, settlementPlan, paymentRail, x402Payload, normalizedX402Payload],
   );
 
   const quoteExchangeSummary = JSON.stringify(
@@ -1705,7 +1738,53 @@ const tx = await walletClient.writeContract({
   const hashAgentCapabilities = () => setAgentCapabilitiesHash(hashText(agentCapabilities));
   const hashResource = () => setResourceHash(hashText(resourceDescriptor));
   const hashTerms = () => setTermsHash(hashJsonText(settlementPlan));
-  const hashX402Payload = () => setX402PayloadHash(hashText(x402Payload));
+  const normalizeX402Payload = () => {
+    try {
+      const result = normalizeX402Requirement(x402Payload);
+      setNormalizedX402Payload(result.canonicalJson);
+      setX402PayloadHash(result.payloadHash);
+      setX402VerifyState({
+        loading: false,
+        error: null,
+        result: JSON.stringify({
+          x402_payload_hash: result.payloadHash,
+          normalized: result.normalized,
+          warnings: result.warnings,
+        }, null, 2),
+      });
+    } catch (error) {
+      setX402VerifyState({
+        loading: false,
+        error: error instanceof Error ? error.message : "Unable to normalize x402 payload",
+        result: null,
+      });
+    }
+  };
+  const verifyX402Payload = async () => {
+    setX402VerifyState({ loading: true, error: null, result: null });
+    try {
+      const response = await fetch(`${API_URL}/x402/normalize`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          payment_requirement_json: safeJson(x402Payload),
+          expected_hash: x402PayloadHash === ZERO_HASH ? undefined : x402PayloadHash,
+          quote: { x402_payload_hash: x402PayloadHash === ZERO_HASH ? undefined : x402PayloadHash },
+        }),
+      });
+      const body = await response.json() as Record<string, unknown>;
+      if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : `${response.status} ${response.statusText}`);
+      if (typeof body.x402_payload_hash === "string") setX402PayloadHash(body.x402_payload_hash);
+      if (typeof body.canonical_json === "string") setNormalizedX402Payload(body.canonical_json);
+      setX402VerifyState({ loading: false, error: null, result: JSON.stringify(body, null, 2) });
+    } catch (error) {
+      setX402VerifyState({
+        loading: false,
+        error: error instanceof Error ? error.message : "x402 verification failed",
+        result: null,
+      });
+    }
+  };
   const runWalletChecks = async () => {
     setWalletCheck((current) => ({ ...current, loading: true, error: null }));
     try {
@@ -2452,12 +2531,12 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                     </div>
                   </div>
                 </div>
-                <TextArea label="x402 payload" value={x402Payload} onChange={setX402Payload} />
+                <TextArea label="x402 payment requirement" value={x402Payload} onChange={setX402Payload} />
                 <TextArea label="Receipt result descriptor" value={resultDescriptor} onChange={setResultDescriptor} />
                 <Field label="Resource hash" value={resourceHash} onChange={setResourceHash} />
                 <Field label="Terms hash" value={termsHash} onChange={setTermsHash} />
                 <Field label="x402 payload hash" value={x402PayloadHash} onChange={setX402PayloadHash} />
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2 sm:grid-cols-4">
                   <button
                     type="button"
                     onClick={hashResource}
@@ -2474,12 +2553,23 @@ cast send "${CONTRACTS.commerceRegistry}" \\
                   </button>
                   <button
                     type="button"
-                    onClick={hashX402Payload}
+                    onClick={normalizeX402Payload}
                     className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text"
                   >
-                    Hash x402 sample
+                    Normalize x402
+                  </button>
+                  <button
+                    type="button"
+                    onClick={verifyX402Payload}
+                    disabled={x402VerifyState.loading}
+                    className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {x402VerifyState.loading ? "Verifying..." : "Verify x402"}
                   </button>
                 </div>
+                {x402VerifyState.error ? (
+                  <p className="text-xs text-red-300">{x402VerifyState.error}</p>
+                ) : null}
               </div>
               <div className="mt-6 rounded-lg border border-border bg-[#0d1117] p-4">
                 <h3 className="text-sm font-semibold">Agent acceptance checklist</h3>
@@ -2506,6 +2596,8 @@ cast send "${CONTRACTS.commerceRegistry}" \\
               <CodePanel title="Settlement plan JSON" value={settlementPlan} />
               <CodePanel title="Fulfillment plaintext before encryption" value={fulfillmentPlaintext} />
               <CodePanel title="Encrypted fulfillment payload" value={encryptedFulfillmentPayload} />
+              <CodePanel title="Normalized x402 payment requirement" value={normalizedX402Payload || "Normalize or verify an x402 payment requirement to produce the quote-bound hash."} />
+              {x402VerifyState.result ? <CodePanel title="x402 verification result" value={x402VerifyState.result} /> : null}
               <CodePanel title="Fulfillment evidence JSON" value={fulfillmentEvidence} />
               <div className="grid gap-4 lg:grid-cols-2">
                 <QuotePublishPanel
